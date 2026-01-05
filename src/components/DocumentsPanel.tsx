@@ -123,11 +123,14 @@ export function DocumentsPanel({
   const isEmpty = filteredFolders.length === 0 && filteredFiles.length === 0;
   const selectedCount = selectedFolderIds.size + selectedFileIds.size;
   const hasVisibleItems = filteredFolders.length + filteredFiles.length > 0;
+  const selectedVisibleCount =
+    filteredFolders.filter((folder) => selectedFolderIds.has(folder.id))
+      .length +
+    filteredFiles.filter((file) => selectedFileIds.has(file.id)).length;
   const allVisibleSelected =
     hasVisibleItems &&
-    selectedFolderIds.size === filteredFolders.length &&
-    selectedFileIds.size === filteredFiles.length;
-  const someVisibleSelected = selectedCount > 0 && !allVisibleSelected;
+    selectedVisibleCount === filteredFolders.length + filteredFiles.length;
+  const someVisibleSelected = selectedVisibleCount > 0 && !allVisibleSelected;
   const viewButtonBase =
     "inline-flex h-8 w-8 items-center justify-center rounded-full border border-transparent text-muted transition";
   const viewButtonActive = "border-border bg-white text-accent shadow-soft";

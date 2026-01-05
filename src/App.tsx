@@ -185,7 +185,6 @@ export default function App() {
     const finalName = makeUniqueName(normalized, used);
     const dataroomId = createId();
     const rootFolderId = createId();
-    const now = Date.now();
 
     setData((prev) => ({
       ...prev,
@@ -195,7 +194,7 @@ export default function App() {
           id: dataroomId,
           name: finalName,
           rootFolderId,
-          createdAt: now,
+          createdAt: Date.now(),
         },
       },
       folders: {
@@ -207,7 +206,7 @@ export default function App() {
           dataroomId,
           childFolderIds: [],
           fileIds: [],
-          createdAt: now,
+          createdAt: Date.now(),
         },
       },
       activeDataroomId: dataroomId,
