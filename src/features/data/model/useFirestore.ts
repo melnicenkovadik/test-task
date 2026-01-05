@@ -70,7 +70,15 @@ export function useFirestore(userId: string | null) {
           const data = docSnap.data() as Folder;
           folders[docSnap.id] = data;
         });
-        setData((prev: AppState) => ({ ...prev, folders }));
+        setData((prev: AppState) => {
+          // Preserve activeFolderId when updating folders
+          // Only reset if the active folder was deleted
+          const activeFolderId =
+            prev.activeFolderId && folders[prev.activeFolderId]
+              ? prev.activeFolderId
+              : prev.activeFolderId;
+          return { ...prev, folders, activeFolderId };
+        });
       },
       (err: FirestoreError) => {
         console.error("Error listening to folders:", err);
@@ -86,7 +94,10 @@ export function useFirestore(userId: string | null) {
           const data = docSnap.data() as FileItem;
           files[docSnap.id] = data;
         });
-        setData((prev: AppState) => ({ ...prev, files }));
+        setData((prev: AppState) => {
+          // Preserve activeFolderId when updating files
+          return { ...prev, files, activeFolderId: prev.activeFolderId };
+        });
         setLoading(false);
       },
       (err: FirestoreError) => {

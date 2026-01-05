@@ -27,3 +27,6 @@ dist-ssr
 
 # Husky
 .husky/_/
+
+# Docker
+.docker/

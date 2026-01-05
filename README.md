@@ -423,6 +423,56 @@ npm run preview
 
 Build output will be in `dist/` directory.
 
+### Docker Deployment
+
+```bash
+# Build Docker image
+npm run docker:build
+
+# Start container
+npm run docker:up
+
+# Stop container
+npm run docker:down
+
+# View logs
+npm run docker:logs
+
+# Restart container
+npm run docker:restart
+```
+
+Or use docker-compose directly:
+
+```bash
+docker-compose up -d
+```
+
+The application will be available at `http://localhost:3000`
+
+**Environment Variables**: Firebase configuration variables need to be set during build time. You can:
+
+1. **Use .env file** (recommended): Create a `.env` file in the project root with your Firebase credentials:
+
+   ```env
+   VITE_FIREBASE_API_KEY=your-api-key
+   VITE_FIREBASE_AUTH_DOMAIN=your-auth-domain
+   VITE_FIREBASE_PROJECT_ID=your-project-id
+   VITE_FIREBASE_STORAGE_BUCKET=your-storage-bucket
+   VITE_FIREBASE_MESSAGING_SENDER_ID=your-messaging-sender-id
+   VITE_FIREBASE_APP_ID=your-app-id
+   ```
+
+   Docker Compose will automatically read these variables.
+
+2. **Pass via command line**:
+
+   ```bash
+   VITE_FIREBASE_API_KEY=your-key docker-compose build
+   ```
+
+3. **Set in docker-compose.yml**: Edit the `args` section in `docker-compose.yml` directly.
+
 ### Code Quality
 
 ```bash

@@ -103,10 +103,46 @@ export default function App() {
               };
             }
           });
-          setData({ ...firestoreData, files: updatedFiles });
+          setData((prev) => {
+            // Preserve activeFolderId and activeDataroomId from local state
+            // Only update if they don't exist in Firestore data or if Firestore has valid values
+            const activeFolderId =
+              prev.activeFolderId && firestoreData.folders[prev.activeFolderId]
+                ? prev.activeFolderId
+                : firestoreData.activeFolderId || prev.activeFolderId;
+            const activeDataroomId =
+              prev.activeDataroomId &&
+              firestoreData.datarooms[prev.activeDataroomId]
+                ? prev.activeDataroomId
+                : firestoreData.activeDataroomId || prev.activeDataroomId;
+
+            return {
+              ...firestoreData,
+              files: updatedFiles,
+              activeFolderId,
+              activeDataroomId,
+            };
+          });
         } catch (error) {
           console.error("Error loading files from IndexedDB:", error);
-          setData(firestoreData);
+          setData((prev) => {
+            // Preserve activeFolderId and activeDataroomId when error occurs
+            const activeFolderId =
+              prev.activeFolderId && firestoreData.folders[prev.activeFolderId]
+                ? prev.activeFolderId
+                : firestoreData.activeFolderId || prev.activeFolderId;
+            const activeDataroomId =
+              prev.activeDataroomId &&
+              firestoreData.datarooms[prev.activeDataroomId]
+                ? prev.activeDataroomId
+                : firestoreData.activeDataroomId || prev.activeDataroomId;
+
+            return {
+              ...firestoreData,
+              activeFolderId,
+              activeDataroomId,
+            };
+          });
         }
       };
       loadFilesFromIndexedDB();
@@ -663,11 +699,32 @@ export default function App() {
 
     if (user) {
       try {
+        // Delete files from IndexedDB first
+        await Promise.all(
+          Array.from(fileIdsToDelete).map(async (fileId) => {
+            const file = data.files[fileId];
+            if (file?.blobUrl) {
+              try {
+                await deleteFileFromIndexedDB(user.uid, fileId);
+                URL.revokeObjectURL(file.blobUrl);
+              } catch (storageError) {
+                console.warn(
+                  `Failed to delete file ${fileId} from IndexedDB:`,
+                  storageError,
+                );
+              }
+            }
+          }),
+        );
+
+        // Delete folders from Firestore
         await Promise.all(
           Array.from(folderIdsToDelete).map((folderId) =>
             firestoreDeleteFolder(folderId),
           ),
         );
+
+        // Delete files from Firestore
         await Promise.all(
           Array.from(fileIdsToDelete).map((fileId) =>
             firestoreDeleteFile(fileId),
@@ -1286,7 +1343,7 @@ export default function App() {
     moveItemsToFolder(folderId, payload.folderIds, payload.fileIds);
   };
 
-  const handleBulkDelete = (folderIds: string[], fileIds: string[]) => {
+  const handleBulkDelete = async (folderIds: string[], fileIds: string[]) => {
     const rootId = activeDataroom?.rootFolderId ?? null;
     const sanitizedFolderIds = rootId
       ? folderIds.filter((id) => id !== rootId)
@@ -1299,24 +1356,66 @@ export default function App() {
     let deletedFolderIds = new Set<string>();
     let deletedFileIds = new Set<string>();
 
+    // Collect all folders and files to delete
+    const foldersToDelete = new Set<string>();
+    const filesToDelete = new Set<string>(fileIds);
+
+    sanitizedFolderIds.forEach((folderId) => {
+      if (!data.folders[folderId]) return;
+      collectFolderIds(folderId, data).forEach((id) => {
+        foldersToDelete.add(id);
+      });
+    });
+
+    foldersToDelete.forEach((folderId) => {
+      const folder = data.folders[folderId];
+      if (!folder) return;
+      folder.fileIds.forEach((fileId) => filesToDelete.add(fileId));
+    });
+
+    if (user) {
+      try {
+        // Delete files from IndexedDB first
+        await Promise.all(
+          Array.from(filesToDelete).map(async (fileId) => {
+            const file = data.files[fileId];
+            if (file?.blobUrl) {
+              try {
+                await deleteFileFromIndexedDB(user.uid, fileId);
+                URL.revokeObjectURL(file.blobUrl);
+              } catch (storageError) {
+                console.warn(
+                  `Failed to delete file ${fileId} from IndexedDB:`,
+                  storageError,
+                );
+              }
+            }
+          }),
+        );
+
+        // Delete folders from Firestore
+        await Promise.all(
+          Array.from(foldersToDelete).map((folderId) =>
+            firestoreDeleteFolder(folderId),
+          ),
+        );
+
+        // Delete files from Firestore
+        await Promise.all(
+          Array.from(filesToDelete).map((fileId) =>
+            firestoreDeleteFile(fileId),
+          ),
+        );
+      } catch (error) {
+        toast.error("Failed to delete items");
+        console.error(error);
+        return;
+      }
+    }
+
     setData((prev) => {
       const nextFolders = { ...prev.folders };
       const nextFiles = { ...prev.files };
-      const foldersToDelete = new Set<string>();
-      const filesToDelete = new Set<string>(fileIds);
-
-      sanitizedFolderIds.forEach((folderId) => {
-        if (!nextFolders[folderId]) return;
-        collectFolderIds(folderId, prev).forEach((id) => {
-          foldersToDelete.add(id);
-        });
-      });
-
-      foldersToDelete.forEach((folderId) => {
-        const folder = nextFolders[folderId];
-        if (!folder) return;
-        folder.fileIds.forEach((fileId) => filesToDelete.add(fileId));
-      });
 
       filesToDelete.forEach((fileId) => {
         const file = nextFiles[fileId];
