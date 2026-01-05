@@ -67,10 +67,6 @@ export default function App() {
     );
   };
 
-  useEffect(() => {
-    setSelection({ folders: new Set(), files: new Set() });
-  }, [data.activeDataroomId, data.activeFolderId]);
-
   // Cleanup blob URLs on unmount
   const filesRef = useRef<Record<string, FileItem>>(data.files);
   useEffect(() => {
@@ -163,6 +159,15 @@ export default function App() {
     setViewMode(resolveViewMode(id));
     setPreviewFileId(null);
     setSearchQuery("");
+    clearSelection();
+  };
+
+  const handleSelectFolder = (folderId: string) => {
+    setData((prev) => ({
+      ...prev,
+      activeFolderId: folderId,
+    }));
+    clearSelection();
   };
 
   const handleCreateDataroom = (name: string) => {
@@ -213,6 +218,7 @@ export default function App() {
     setViewMode(DEFAULT_VIEW_MODE);
     setViewModeStore(dataroomId, DEFAULT_VIEW_MODE);
     setDialog(null);
+    clearSelection();
     toast.success(`Data room "${finalName}" created.`);
   };
 
@@ -293,6 +299,7 @@ export default function App() {
     setViewMode(resolveViewMode(nextActiveId));
     setPreviewFileId(null);
     setDialog(null);
+    clearSelection();
     toast.info("Data room removed.");
   };
 
@@ -1031,12 +1038,7 @@ export default function App() {
                 folders={data.folders}
                 activeFolderId={data.activeFolderId}
                 expandedFolderIds={expandedFolderIds}
-                onSelect={(folderId) =>
-                  setData((prev) => ({
-                    ...prev,
-                    activeFolderId: folderId,
-                  }))
-                }
+                onSelect={handleSelectFolder}
                 onToggle={(folderId) => {
                   setExpandedFolderIds((prev) => {
                     const next = new Set(prev);
@@ -1103,12 +1105,7 @@ export default function App() {
                 onUploadFiles={(files: FileList | File[]) =>
                   handleUploadFiles(files, activeFolder.id)
                 }
-                onSelectFolder={(folderId) =>
-                  setData((prev) => ({
-                    ...prev,
-                    activeFolderId: folderId,
-                  }))
-                }
+                onSelectFolder={handleSelectFolder}
                 onSelectFile={(fileId: string | null) => {
                   setPreviewFileId(fileId);
                   const file = fileId ? data.files[fileId] : null;
