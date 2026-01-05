@@ -71,8 +71,6 @@ export function useFirestore(userId: string | null) {
           folders[docSnap.id] = data;
         });
         setData((prev: AppState) => {
-          // Preserve activeFolderId when updating folders
-          // Only reset if the active folder was deleted
           const activeFolderId =
             prev.activeFolderId && folders[prev.activeFolderId]
               ? prev.activeFolderId
@@ -95,7 +93,6 @@ export function useFirestore(userId: string | null) {
           files[docSnap.id] = data;
         });
         setData((prev: AppState) => {
-          // Preserve activeFolderId when updating files
           return { ...prev, files, activeFolderId: prev.activeFolderId };
         });
         setLoading(false);

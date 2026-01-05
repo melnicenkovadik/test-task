@@ -114,8 +114,6 @@ export default function App() {
             }
           });
           setData((prev) => {
-            // Preserve activeFolderId and activeDataroomId from local state
-            // Only update if they don't exist in Firestore data or if Firestore has valid values
             const activeFolderId =
               prev.activeFolderId && firestoreData.folders[prev.activeFolderId]
                 ? prev.activeFolderId
@@ -126,7 +124,6 @@ export default function App() {
                 ? prev.activeDataroomId
                 : firestoreData.activeDataroomId || prev.activeDataroomId;
 
-            // Hydrate view mode from store
             const hydratedViewMode = activeDataroomId
               ? getViewModeFromStore(activeDataroomId)
               : DEFAULT_VIEW_MODE;
@@ -142,7 +139,6 @@ export default function App() {
         } catch (error) {
           console.error("Error loading files from IndexedDB:", error);
           setData((prev) => {
-            // Preserve activeFolderId and activeDataroomId when error occurs
             const activeFolderId =
               prev.activeFolderId && firestoreData.folders[prev.activeFolderId]
                 ? prev.activeFolderId
@@ -153,7 +149,6 @@ export default function App() {
                 ? prev.activeDataroomId
                 : firestoreData.activeDataroomId || prev.activeDataroomId;
 
-            // Hydrate view mode from store even on error
             const hydratedViewMode = activeDataroomId
               ? getViewModeFromStore(activeDataroomId)
               : DEFAULT_VIEW_MODE;
@@ -742,7 +737,6 @@ export default function App() {
     if (user) {
       setLoading(true);
       try {
-        // Delete files from IndexedDB first
         await Promise.all(
           Array.from(fileIdsToDelete).map(async (fileId) => {
             const file = data.files[fileId];
@@ -760,14 +754,12 @@ export default function App() {
           }),
         );
 
-        // Delete folders from Firestore
         await Promise.all(
           Array.from(folderIdsToDelete).map((folderId) =>
             firestoreDeleteFolder(folderId),
           ),
         );
 
-        // Delete files from Firestore
         await Promise.all(
           Array.from(fileIdsToDelete).map((fileId) =>
             firestoreDeleteFile(fileId),
@@ -1412,7 +1404,6 @@ export default function App() {
     let deletedFolderIds = new Set<string>();
     let deletedFileIds = new Set<string>();
 
-    // Collect all folders and files to delete
     const foldersToDelete = new Set<string>();
     const filesToDelete = new Set<string>(fileIds);
 
@@ -1432,7 +1423,6 @@ export default function App() {
     if (user) {
       setLoading(true);
       try {
-        // Delete files from IndexedDB first
         await Promise.all(
           Array.from(filesToDelete).map(async (fileId) => {
             const file = data.files[fileId];
@@ -1450,14 +1440,12 @@ export default function App() {
           }),
         );
 
-        // Delete folders from Firestore
         await Promise.all(
           Array.from(foldersToDelete).map((folderId) =>
             firestoreDeleteFolder(folderId),
           ),
         );
 
-        // Delete files from Firestore
         await Promise.all(
           Array.from(filesToDelete).map((fileId) =>
             firestoreDeleteFile(fileId),
@@ -1553,7 +1541,6 @@ export default function App() {
     }
   };
 
-  // Hydrate view mode when activeDataroomId changes
   useEffect(() => {
     if (data.activeDataroomId) {
       const hydratedViewMode = getViewModeFromStore(data.activeDataroomId);

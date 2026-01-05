@@ -110,11 +110,12 @@ export function DocumentsList({
         <span className="text-right">Actions</span>
       </div>
       <div className="divide-y divide-border overflow-visible">
-        {rows.map((row) => (
+        {rows.map((row, index) => (
           <div
             key={row.id}
             className={cx(
               "grid grid-cols-[32px_minmax(0,1fr)_140px_120px_88px] items-center gap-3 px-4 py-3 text-sm transition cursor-pointer overflow-visible",
+              index === rows.length - 1 && "rounded-b-2xl",
               row.isSelected
                 ? "bg-white shadow-soft"
                 : row.type === "file" && row.isActive
