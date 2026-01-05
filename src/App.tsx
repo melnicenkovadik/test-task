@@ -20,6 +20,7 @@ import {
 import { createDemoState, createEmptyState } from "./utils/demo";
 import { DEFAULT_VIEW_MODE, useDocumentsStore } from "./store/documentsStore";
 import { useUIStore } from "./store/uiStore";
+import { useLoadingStore } from "./store/loadingStore";
 import {
   ConfirmDialog,
   DataroomPanel,
@@ -33,6 +34,7 @@ import {
   LoginDialog,
   SignUpDialog,
 } from "./components";
+import { Loader } from "./shared/ui/Loader";
 import { useAuth } from "./features/auth/model/useAuth";
 import { useFirestore } from "./features/data/model/useFirestore";
 import {
@@ -89,6 +91,14 @@ export default function App() {
     ? getExpandedFolders(data.activeDataroomId)
     : new Set<string>();
 
+  const setViewModeStore = useDocumentsStore((state) => state.setViewMode);
+
+  const getViewModeFromStore = useCallback((dataroomId: string | null) => {
+    if (!dataroomId) return DEFAULT_VIEW_MODE;
+    const store = useDocumentsStore.getState();
+    return store.cases[dataroomId]?.viewMode ?? DEFAULT_VIEW_MODE;
+  }, []);
+
   useEffect(() => {
     if (user && firestoreData && !firestoreLoading) {
       const loadFilesFromIndexedDB = async () => {
@@ -116,6 +126,12 @@ export default function App() {
                 ? prev.activeDataroomId
                 : firestoreData.activeDataroomId || prev.activeDataroomId;
 
+            // Hydrate view mode from store
+            const hydratedViewMode = activeDataroomId
+              ? getViewModeFromStore(activeDataroomId)
+              : DEFAULT_VIEW_MODE;
+            setViewMode(hydratedViewMode);
+
             return {
               ...firestoreData,
               files: updatedFiles,
@@ -137,6 +153,12 @@ export default function App() {
                 ? prev.activeDataroomId
                 : firestoreData.activeDataroomId || prev.activeDataroomId;
 
+            // Hydrate view mode from store even on error
+            const hydratedViewMode = activeDataroomId
+              ? getViewModeFromStore(activeDataroomId)
+              : DEFAULT_VIEW_MODE;
+            setViewMode(hydratedViewMode);
+
             return {
               ...firestoreData,
               activeFolderId,
@@ -147,14 +169,15 @@ export default function App() {
       };
       loadFilesFromIndexedDB();
     } else if (!user) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setData(createEmptyState);
+      setViewMode(DEFAULT_VIEW_MODE);
     }
-  }, [user, firestoreData, firestoreLoading]);
+  }, [user, firestoreData, firestoreLoading, getViewModeFromStore]);
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [previewFileId, setPreviewFileId] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const { isLoading, setLoading } = useLoadingStore();
   const [viewMode, setViewMode] = useState<ViewMode>(DEFAULT_VIEW_MODE);
   const [selection, setSelection] = useState<SelectionState>(() => ({
     folders: new Set(),
@@ -168,15 +191,6 @@ export default function App() {
     ? data.folders[data.activeFolderId]
     : null;
   const previewFile = previewFileId ? data.files[previewFileId] : null;
-  const setViewModeStore = useDocumentsStore((state) => state.setViewMode);
-
-  const resolveViewMode = (dataroomId: string | null) => {
-    if (!dataroomId) return DEFAULT_VIEW_MODE;
-    return (
-      useDocumentsStore.getState().cases[dataroomId]?.viewMode ??
-      DEFAULT_VIEW_MODE
-    );
-  };
 
   const filesRef = useRef<Record<string, FileItem>>(data.files);
   useEffect(() => {
@@ -249,7 +263,10 @@ export default function App() {
     if (demoRoot && demoState.activeDataroomId) {
       setExpandedFolders(demoState.activeDataroomId, [demoRoot.id]);
     }
-    setViewMode(resolveViewMode(demoState.activeDataroomId));
+    const hydratedViewMode = demoState.activeDataroomId
+      ? getViewModeFromStore(demoState.activeDataroomId)
+      : DEFAULT_VIEW_MODE;
+    setViewMode(hydratedViewMode);
     setSearchQuery("");
     setPreviewFileId(null);
     clearSelection();
@@ -261,6 +278,7 @@ export default function App() {
     if (!dataroom) return;
 
     if (user) {
+      setLoading(true);
       try {
         await firestoreSetActiveDataroomId(id);
         await firestoreSetActiveFolderId(dataroom.rootFolderId);
@@ -274,6 +292,8 @@ export default function App() {
         toast.error("Failed to switch data room");
         console.error(error);
         return;
+      } finally {
+        setLoading(false);
       }
     } else {
       setData((prev) => ({
@@ -286,7 +306,8 @@ export default function App() {
     if (id) {
       setExpandedFolders(id, [dataroom.rootFolderId]);
     }
-    setViewMode(resolveViewMode(id));
+    const hydratedViewMode = getViewModeFromStore(id);
+    setViewMode(hydratedViewMode);
     setPreviewFileId(null);
     setSearchQuery("");
     clearSelection();
@@ -304,6 +325,7 @@ export default function App() {
     }
 
     if (user) {
+      setLoading(true);
       try {
         await firestoreSetActiveFolderId(folderId);
 
@@ -315,6 +337,8 @@ export default function App() {
         toast.error("Failed to select folder");
         console.error(error);
         return;
+      } finally {
+        setLoading(false);
       }
     } else {
       setData((prev) => ({
@@ -364,6 +388,7 @@ export default function App() {
       };
 
       if (user) {
+        setLoading(true);
         try {
           await firestoreCreateDataroom(newDataroom);
           await firestoreCreateFolder(newRootFolder);
@@ -387,6 +412,8 @@ export default function App() {
           toast.error("Failed to create data room");
           console.error(error);
           return;
+        } finally {
+          setLoading(false);
         }
       } else {
         setData((prev) => ({
@@ -420,6 +447,7 @@ export default function App() {
       firestoreSetActiveFolderId,
       setViewModeStore,
       setExpandedFolders,
+      setLoading,
     ],
   );
 
@@ -450,12 +478,15 @@ export default function App() {
     }
 
     if (user) {
+      setLoading(true);
       try {
         await firestoreUpdateDataroom(id, { name: normalized });
       } catch (error) {
         toast.error("Failed to rename data room");
         console.error(error);
         return;
+      } finally {
+        setLoading(false);
       }
     } else {
       setData((prev) => ({
@@ -507,6 +538,8 @@ export default function App() {
         toast.error("Failed to delete data room");
         console.error(error);
         return;
+      } finally {
+        setLoading(false);
       }
     } else {
       setData((prev) => {
@@ -544,7 +577,10 @@ export default function App() {
     } else if (nextActiveId) {
       setExpandedFolders(nextActiveId, []);
     }
-    setViewMode(resolveViewMode(nextActiveId));
+    const hydratedViewMode = nextActiveId
+      ? getViewModeFromStore(nextActiveId)
+      : DEFAULT_VIEW_MODE;
+    setViewMode(hydratedViewMode);
     setPreviewFileId(null);
     setDialog(null);
     clearSelection();
@@ -591,6 +627,7 @@ export default function App() {
     };
 
     if (user) {
+      setLoading(true);
       try {
         await firestoreCreateFolder(newFolder);
         await firestoreUpdateFolder(parentId, {
@@ -600,6 +637,8 @@ export default function App() {
         toast.error("Failed to create folder");
         console.error(error);
         return;
+      } finally {
+        setLoading(false);
       }
     } else {
       setData((prev) => ({
@@ -648,12 +687,15 @@ export default function App() {
     }
 
     if (user) {
+      setLoading(true);
       try {
         await firestoreUpdateFolder(id, { name: normalized });
       } catch (error) {
         toast.error("Failed to rename folder");
         console.error(error);
         return;
+      } finally {
+        setLoading(false);
       }
     } else {
       setData((prev) => ({
@@ -698,6 +740,7 @@ export default function App() {
     }
 
     if (user) {
+      setLoading(true);
       try {
         // Delete files from IndexedDB first
         await Promise.all(
@@ -752,6 +795,8 @@ export default function App() {
         toast.error("Failed to delete folder");
         console.error(error);
         return;
+      } finally {
+        setLoading(false);
       }
     } else {
       setData((prev) => {
@@ -849,6 +894,7 @@ export default function App() {
     const now = Date.now();
 
     if (user) {
+      setLoading(true);
       try {
         const uploadPromises = validFiles.map(async (file) => {
           const fileId = createId();
@@ -903,6 +949,8 @@ export default function App() {
         toast.error("Failed to upload files");
         console.error(error);
         return;
+      } finally {
+        setLoading(false);
       }
     } else {
       setData((prev) => {
@@ -967,12 +1015,15 @@ export default function App() {
     }
 
     if (user) {
+      setLoading(true);
       try {
         await firestoreUpdateFile(id, { name: finalName });
       } catch (error) {
         toast.error("Failed to rename file");
         console.error(error);
         return;
+      } finally {
+        setLoading(false);
       }
     } else {
       setData((prev) => ({
@@ -995,6 +1046,7 @@ export default function App() {
     const parent = data.folders[file.parentFolderId];
 
     if (user) {
+      setLoading(true);
       try {
         if (file.blobUrl) {
           try {
@@ -1014,6 +1066,8 @@ export default function App() {
         toast.error("Failed to delete file");
         console.error(error);
         return;
+      } finally {
+        setLoading(false);
       }
     } else {
       setData((prev) => {
@@ -1272,6 +1326,8 @@ export default function App() {
         toast.error("Failed to move items");
         console.error(error);
         return;
+      } finally {
+        setLoading(false);
       }
     } else {
       setData((prev) => {
@@ -1374,6 +1430,7 @@ export default function App() {
     });
 
     if (user) {
+      setLoading(true);
       try {
         // Delete files from IndexedDB first
         await Promise.all(
@@ -1410,6 +1467,8 @@ export default function App() {
         toast.error("Failed to delete items");
         console.error(error);
         return;
+      } finally {
+        setLoading(false);
       }
     }
 
@@ -1493,6 +1552,16 @@ export default function App() {
       setViewModeStore(data.activeDataroomId, mode);
     }
   };
+
+  // Hydrate view mode when activeDataroomId changes
+  useEffect(() => {
+    if (data.activeDataroomId) {
+      const hydratedViewMode = getViewModeFromStore(data.activeDataroomId);
+      setViewMode(hydratedViewMode);
+    } else {
+      setViewMode(DEFAULT_VIEW_MODE);
+    }
+  }, [data.activeDataroomId, getViewModeFromStore]);
 
   const buildFolderLabel = (folderId: string) => {
     const parts: string[] = [];
@@ -1918,6 +1987,8 @@ export default function App() {
           onCancel={() => setDialog(null)}
         />
       )}
+
+      {isLoading && <Loader />}
     </div>
   );
 }
