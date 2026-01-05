@@ -1,4 +1,5 @@
 import { cx } from "../utils";
+import { TooltipLabel } from "../shared/ui/TooltipLabel";
 
 interface ItemRowProps {
   title: string;
@@ -56,12 +57,16 @@ export function ItemRow({
       <div className="flex min-w-0 items-center gap-3">
         {leading && <div className="shrink-0">{leading}</div>}
         <div className="shrink-0 text-accent">{icon}</div>
-        <div className="min-w-0">
-          <p className="font-medium truncate" title={title}>
-            {title}
+        <div className="min-w-0 flex-1 overflow-hidden">
+          <p className="font-medium truncate">
+            <TooltipLabel text={title} className="flex-1">
+              {title}
+            </TooltipLabel>
           </p>
-          <p className="text-xs text-muted truncate" title={subtitle}>
-            {subtitle}
+          <p className="text-xs text-muted truncate">
+            <TooltipLabel text={subtitle} className="flex-1">
+              {subtitle}
+            </TooltipLabel>
           </p>
         </div>
       </div>

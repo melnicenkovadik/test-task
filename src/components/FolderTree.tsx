@@ -1,7 +1,7 @@
 import type { Folder } from "../types";
 import { cx } from "../utils";
-import { buttonStyles } from "../utils/styles";
-import { ChevronIcon, EditIcon, FolderIcon, TrashIcon } from "./Icons";
+import { ChevronIcon, FolderIcon } from "./Icons";
+import { TooltipLabel } from "../shared/ui/TooltipLabel";
 
 interface FolderTreeProps {
   rootId: string;
@@ -10,13 +10,8 @@ interface FolderTreeProps {
   expandedFolderIds: Set<string>;
   onSelect: (folderId: string) => void;
   onToggle: (folderId: string) => void;
-  onRename: (folderId: string) => void;
-  onDelete: (folderId: string) => void;
   hideRoot?: boolean;
-  onDropItems?: (
-    event: React.DragEvent<HTMLElement>,
-    folderId: string,
-  ) => void;
+  onDropItems?: (event: React.DragEvent<HTMLElement>, folderId: string) => void;
   onDragOverFolder?: (event: React.DragEvent<HTMLElement>) => void;
   onDragStartFolder?: (
     event: React.DragEvent<HTMLDivElement>,
@@ -31,8 +26,6 @@ export function FolderTree({
   expandedFolderIds,
   onSelect,
   onToggle,
-  onRename,
-  onDelete,
   hideRoot = false,
   onDropItems,
   onDragOverFolder,
@@ -88,32 +81,13 @@ export function FolderTree({
             <span className="shrink-0 text-accent">
               <FolderIcon />
             </span>
-            <span className="truncate" title={label}>
+            <TooltipLabel
+              text={isRoot ? "All documents" : folder.name}
+              className="flex-1"
+            >
               {label}
-            </span>
+            </TooltipLabel>
           </button>
-          <div className="flex items-center gap-1 text-xs opacity-100 transition lg:opacity-0 lg:group-hover:opacity-100">
-            {!isRoot && (
-              <>
-                <button
-                  className={buttonStyles.icon}
-                  onClick={() => onRename(folder.id)}
-                  title="Rename folder"
-                  aria-label="Rename folder"
-                >
-                  <EditIcon />
-                </button>
-                <button
-                  className={buttonStyles.icon}
-                  onClick={() => onDelete(folder.id)}
-                  title="Delete folder"
-                  aria-label="Delete folder"
-                >
-                  <TrashIcon />
-                </button>
-              </>
-            )}
-          </div>
         </div>
 
         {isExpanded && hasChildren && (

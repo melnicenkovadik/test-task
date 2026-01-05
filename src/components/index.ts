@@ -1,13 +1,10 @@
-// Icons
 export * from "./Icons";
-
-// Dialogs and modals
+export { LoginDialog } from "../features/auth/ui/LoginDialog";
+export { SignUpDialog } from "../features/auth/ui/SignUpDialog";
 export { DialogShell } from "./DialogShell";
 export { NameDialog } from "./NameDialog";
 export { ConfirmDialog } from "./ConfirmDialog";
 export { MoveItemsDialog } from "./MoveItemsDialog";
-
-// Components
 export { ItemRow } from "./ItemRow";
 export { FilePreview } from "./FilePreview";
 export { EmptyState } from "./EmptyState";

@@ -3,6 +3,7 @@ import type { FileItem, Folder } from "../types";
 import { cx, formatBytes, formatDate } from "../utils";
 import { buttonStyles } from "../utils/styles";
 import { EditIcon, FileIcon, FolderIcon, TrashIcon } from "./Icons";
+import { TooltipLabel } from "../shared/ui/TooltipLabel";
 
 interface DocumentsListProps {
   folders: Folder[];
@@ -88,8 +89,8 @@ export function DocumentsList({
   ];
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-white/70">
-      <div className="grid grid-cols-[32px_minmax(0,1fr)_140px_120px_88px] gap-3 border-b border-border bg-white/80 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-muted">
+    <div className="rounded-2xl border border-border bg-white/70">
+      <div className="grid grid-cols-[32px_minmax(0,1fr)_140px_120px_88px] gap-3 border-b border-border bg-white/80 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-muted rounded-t-2xl">
         <div className="flex items-center justify-center">
           <input
             ref={selectAllRef}
@@ -108,17 +109,17 @@ export function DocumentsList({
         <span>Added</span>
         <span className="text-right">Actions</span>
       </div>
-      <div className="divide-y divide-border">
+      <div className="divide-y divide-border overflow-visible">
         {rows.map((row) => (
           <div
             key={row.id}
             className={cx(
-              "grid grid-cols-[32px_minmax(0,1fr)_140px_120px_88px] items-center gap-3 px-4 py-3 text-sm transition cursor-pointer",
+              "grid grid-cols-[32px_minmax(0,1fr)_140px_120px_88px] items-center gap-3 px-4 py-3 text-sm transition cursor-pointer overflow-visible",
               row.isSelected
                 ? "bg-white shadow-soft"
                 : row.type === "file" && row.isActive
-                ? "bg-white shadow-soft"
-                : "hover:bg-white",
+                  ? "bg-white shadow-soft"
+                  : "hover:bg-white",
             )}
             role="button"
             tabIndex={0}
@@ -130,12 +131,8 @@ export function DocumentsList({
               }
             }}
             draggable
-            onDragStart={(event) =>
-              onDragStartItem(event, row.type, row.id)
-            }
-            onDragOver={
-              row.type === "folder" ? onDragOverFolder : undefined
-            }
+            onDragStart={(event) => onDragStartItem(event, row.type, row.id)}
+            onDragOver={row.type === "folder" ? onDragOverFolder : undefined}
             onDrop={
               row.type === "folder"
                 ? (event) => onDropOnFolder(event, row.id)
@@ -162,12 +159,16 @@ export function DocumentsList({
               <span className="shrink-0 text-accent">
                 {row.type === "folder" ? <FolderIcon /> : <FileIcon />}
               </span>
-              <span className="truncate font-medium" title={row.name}>
-                {row.name}
+              <span className="font-medium min-w-0">
+                <TooltipLabel text={row.name} className="max-w-full">
+                  {row.name}
+                </TooltipLabel>
               </span>
             </div>
-            <span className="truncate text-xs text-muted" title={row.details}>
-              {row.details}
+            <span className="text-xs text-muted min-w-0">
+              <TooltipLabel text={row.details} className="max-w-full">
+                {row.details}
+              </TooltipLabel>
             </span>
             <span className="text-xs text-muted">
               {formatDate(row.createdAt)}

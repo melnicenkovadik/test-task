@@ -59,7 +59,10 @@ export function NameDialog({
           >
             Cancel
           </button>
-          <button type="submit" className={cx(buttonStyles.base, buttonStyles.primary)}>
+          <button
+            type="submit"
+            className={cx(buttonStyles.base, buttonStyles.primary)}
+          >
             {confirmLabel}
           </button>
         </div>

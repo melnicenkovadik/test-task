@@ -2,6 +2,7 @@ import type { FileItem } from "../types";
 import { cx } from "../utils";
 import { buttonStyles } from "../utils/styles";
 import { CloseIcon, FileIcon } from "./Icons";
+import { TooltipLabel } from "../shared/ui/TooltipLabel";
 
 interface FilePreviewProps {
   file: FileItem;
@@ -23,12 +24,14 @@ export function FilePreview({ file, onClose }: FilePreviewProps) {
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-4">
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-xs uppercase tracking-[0.2em] text-muted">
               PDF preview
             </p>
-            <p className="text-sm font-semibold truncate" title={file.name}>
-              {file.name}
+            <p className="text-sm font-semibold">
+              <TooltipLabel text={file.name} className="flex-1">
+                {file.name}
+              </TooltipLabel>
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -62,7 +65,9 @@ export function FilePreview({ file, onClose }: FilePreviewProps) {
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-sm text-muted">
               <FileIcon />
-              <p className="font-semibold">Preview is only available for uploaded PDFs.</p>
+              <p className="font-semibold">
+                Preview is only available for uploaded PDFs.
+              </p>
             </div>
           )}
         </div>

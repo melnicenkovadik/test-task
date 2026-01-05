@@ -1,6 +1,7 @@
 import { cx } from "../utils";
 import { buttonStyles } from "../utils/styles";
-import { PlusIcon, SparkIcon } from "./Icons";
+import { PlusIcon, SparkIcon, LogOutIcon } from "./Icons";
+import { useAuth } from "../features/auth/model/useAuth";
 
 interface HeaderProps {
   onCreateDataroom: () => void;
@@ -8,6 +9,15 @@ interface HeaderProps {
 }
 
 export function Header({ onCreateDataroom, onLoadDemo }: HeaderProps) {
+  const { user, logout } = useAuth();
+
+  const handleLogout = async () => {
+    const { error } = await logout();
+    if (error) {
+      console.error("Logout error:", error);
+    }
+  };
+
   return (
     <header className="flex flex-wrap items-center justify-between gap-6">
       <div className="space-y-2">
@@ -25,6 +35,20 @@ export function Header({ onCreateDataroom, onLoadDemo }: HeaderProps) {
         </p>
       </div>
       <div className="flex items-center gap-2">
+        {user && (
+          <div className="flex items-center gap-2 text-sm text-muted">
+            <span className="hidden sm:inline">{user.email}</span>
+            <button
+              className={cx(buttonStyles.base, buttonStyles.ghost)}
+              onClick={handleLogout}
+              title="Sign out"
+              aria-label="Sign out"
+            >
+              <LogOutIcon />
+              <span className="hidden sm:inline">Sign out</span>
+            </button>
+          </div>
+        )}
         <button
           className={cx(buttonStyles.base, buttonStyles.ghost)}
           onClick={onCreateDataroom}

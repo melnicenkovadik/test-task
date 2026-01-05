@@ -1,6 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Toaster, toast } from "sonner";
-import type { AppState, DialogState, FileItem, ViewMode } from "./types";
+import type {
+  AppState,
+  DialogState,
+  FileItem,
+  Folder,
+  ViewMode,
+} from "./types";
 import {
   collectFolderIds,
   createId,
@@ -13,6 +19,7 @@ import {
 } from "./utils";
 import { createDemoState, createEmptyState } from "./utils/demo";
 import { DEFAULT_VIEW_MODE, useDocumentsStore } from "./store/documentsStore";
+import { useUIStore } from "./store/uiStore";
 import {
   ConfirmDialog,
   DataroomPanel,
@@ -23,7 +30,16 @@ import {
   NameDialog,
   MoveItemsDialog,
   FilePreview,
+  LoginDialog,
+  SignUpDialog,
 } from "./components";
+import { useAuth } from "./features/auth/model/useAuth";
+import { useFirestore } from "./features/data/model/useFirestore";
+import {
+  saveFileToIndexedDB,
+  deleteFileFromIndexedDB,
+  getAllUserFiles,
+} from "./shared/lib/indexedDB";
 
 type SelectionState = {
   folders: Set<string>;
@@ -36,10 +52,69 @@ type DragPayload = {
 };
 
 export default function App() {
+  const { user, loading: authLoading } = useAuth();
+  const [authDialog, setAuthDialog] = useState<"login" | "signup" | null>(null);
+
+  const isFirebaseConfigured =
+    import.meta.env.VITE_FIREBASE_API_KEY &&
+    import.meta.env.VITE_FIREBASE_API_KEY !== "";
+
+  const firestore = useFirestore(user?.uid || null);
+  const {
+    data: firestoreData,
+    loading: firestoreLoading,
+    createDataroom: firestoreCreateDataroom,
+    updateDataroom: firestoreUpdateDataroom,
+    deleteDataroom: firestoreDeleteDataroom,
+    createFolder: firestoreCreateFolder,
+    updateFolder: firestoreUpdateFolder,
+    deleteFolder: firestoreDeleteFolder,
+    createFile: firestoreCreateFile,
+    updateFile: firestoreUpdateFile,
+    deleteFile: firestoreDeleteFile,
+    setActiveDataroomId: firestoreSetActiveDataroomId,
+    setActiveFolderId: firestoreSetActiveFolderId,
+  } = firestore;
+
   const [data, setData] = useState<AppState>(createEmptyState);
-  const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(
-    () => new Set(),
-  );
+
+  const {
+    getExpandedFolders,
+    addFolder,
+    removeFolder: removeFolderFromStore,
+    setExpandedFolders,
+  } = useUIStore();
+
+  const expandedFolderIds = data.activeDataroomId
+    ? getExpandedFolders(data.activeDataroomId)
+    : new Set<string>();
+
+  useEffect(() => {
+    if (user && firestoreData && !firestoreLoading) {
+      const loadFilesFromIndexedDB = async () => {
+        try {
+          const indexedDBFiles = await getAllUserFiles(user.uid);
+          const updatedFiles = { ...firestoreData.files };
+          Object.keys(firestoreData.files).forEach((fileId) => {
+            if (indexedDBFiles[fileId]) {
+              updatedFiles[fileId] = {
+                ...updatedFiles[fileId],
+                blobUrl: indexedDBFiles[fileId],
+              };
+            }
+          });
+          setData({ ...firestoreData, files: updatedFiles });
+        } catch (error) {
+          console.error("Error loading files from IndexedDB:", error);
+          setData(firestoreData);
+        }
+      };
+      loadFilesFromIndexedDB();
+    } else if (!user) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setData(createEmptyState);
+    }
+  }, [user, firestoreData, firestoreLoading]);
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [previewFileId, setPreviewFileId] = useState<string | null>(null);
@@ -67,7 +142,6 @@ export default function App() {
     );
   };
 
-  // Cleanup blob URLs on unmount
   const filesRef = useRef<Record<string, FileItem>>(data.files);
   useEffect(() => {
     filesRef.current = data.files;
@@ -83,7 +157,6 @@ export default function App() {
     };
   }, []);
 
-  // Compute folder path
   const folderPath = useMemo(() => {
     if (!activeFolder) return [];
     const path = [];
@@ -96,7 +169,6 @@ export default function App() {
     return path;
   }, [activeFolder, data.folders]);
 
-  // Sorted folders and files
   const sortedFolders = useMemo(() => {
     if (!activeFolder) return [];
     return activeFolder.childFolderIds
@@ -113,7 +185,6 @@ export default function App() {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [activeFolder, data.files]);
 
-  // Filtered folders and files
   const filteredFolders = useMemo(() => {
     const query = normalizeName(searchQuery).toLowerCase();
     if (!query) return sortedFolders;
@@ -130,15 +201,17 @@ export default function App() {
     );
   }, [sortedFiles, searchQuery]);
 
-  // Handlers
+  const clearSelection = () =>
+    setSelection({ folders: new Set(), files: new Set() });
+
   const handleCreateDemo = () => {
     const demoState = createDemoState();
     setData(demoState);
     const demoRoot = Object.values(demoState.folders).find(
       (folder) => folder.parentId === null,
     );
-    if (demoRoot) {
-      setExpandedFolderIds(new Set([demoRoot.id]));
+    if (demoRoot && demoState.activeDataroomId) {
+      setExpandedFolders(demoState.activeDataroomId, [demoRoot.id]);
     }
     setViewMode(resolveViewMode(demoState.activeDataroomId));
     setSearchQuery("");
@@ -147,85 +220,180 @@ export default function App() {
     toast.success("Demo data room is ready.");
   };
 
-  const selectDataroom = (id: string) => {
+  const selectDataroom = async (id: string) => {
     const dataroom = data.datarooms[id];
     if (!dataroom) return;
-    setData((prev) => ({
-      ...prev,
-      activeDataroomId: id,
-      activeFolderId: dataroom.rootFolderId,
-    }));
-    setExpandedFolderIds(new Set([dataroom.rootFolderId]));
+
+    if (user) {
+      try {
+        await firestoreSetActiveDataroomId(id);
+        await firestoreSetActiveFolderId(dataroom.rootFolderId);
+
+        setData((prev) => ({
+          ...prev,
+          activeDataroomId: id,
+          activeFolderId: dataroom.rootFolderId,
+        }));
+      } catch (error) {
+        toast.error("Failed to switch data room");
+        console.error(error);
+        return;
+      }
+    } else {
+      setData((prev) => ({
+        ...prev,
+        activeDataroomId: id,
+        activeFolderId: dataroom.rootFolderId,
+      }));
+    }
+
+    if (id) {
+      setExpandedFolders(id, [dataroom.rootFolderId]);
+    }
     setViewMode(resolveViewMode(id));
     setPreviewFileId(null);
     setSearchQuery("");
     clearSelection();
   };
 
-  const handleSelectFolder = (folderId: string) => {
-    setData((prev) => ({
-      ...prev,
-      activeFolderId: folderId,
-    }));
-    clearSelection();
-  };
+  const handleSelectFolder = async (folderId: string) => {
+    const folder = data.folders[folderId];
 
-  const handleCreateDataroom = (name: string) => {
-    const normalized = normalizeName(name);
-    if (!normalized) {
-      setDialog((prev) =>
-        prev && "error" in prev ? { ...prev, error: "Name is required." } : prev,
-      );
-      return;
+    if (folder && data.activeDataroomId) {
+      let current: Folder | undefined = folder;
+      while (current && current.parentId) {
+        addFolder(data.activeDataroomId, current.parentId);
+        current = data.folders[current.parentId];
+      }
     }
 
-    const used = new Set(
-      Object.values(data.datarooms).map((room) => room.name.toLowerCase()),
-    );
-    const finalName = makeUniqueName(normalized, used);
-    const dataroomId = createId();
-    const rootFolderId = createId();
+    if (user) {
+      try {
+        await firestoreSetActiveFolderId(folderId);
 
-    setData((prev) => ({
-      ...prev,
-      datarooms: {
-        ...prev.datarooms,
-        [dataroomId]: {
-          id: dataroomId,
-          name: finalName,
-          rootFolderId,
-          createdAt: Date.now(),
-        },
-      },
-      folders: {
-        ...prev.folders,
-        [rootFolderId]: {
-          id: rootFolderId,
-          name: "All documents",
-          parentId: null,
-          dataroomId,
-          childFolderIds: [],
-          fileIds: [],
-          createdAt: Date.now(),
-        },
-      },
-      activeDataroomId: dataroomId,
-      activeFolderId: rootFolderId,
-    }));
+        setData((prev) => ({
+          ...prev,
+          activeFolderId: folderId,
+        }));
+      } catch (error) {
+        toast.error("Failed to select folder");
+        console.error(error);
+        return;
+      }
+    } else {
+      setData((prev) => ({
+        ...prev,
+        activeFolderId: folderId,
+      }));
+    }
 
-    setExpandedFolderIds(new Set([rootFolderId]));
-    setViewMode(DEFAULT_VIEW_MODE);
-    setViewModeStore(dataroomId, DEFAULT_VIEW_MODE);
-    setDialog(null);
     clearSelection();
-    toast.success(`Data room "${finalName}" created.`);
   };
 
-  const handleRenameDataroom = (id: string, name: string) => {
+  const handleCreateDataroom = useCallback(
+    async (name: string) => {
+      const normalized = normalizeName(name);
+      if (!normalized) {
+        setDialog((prev) =>
+          prev && "error" in prev
+            ? { ...prev, error: "Name is required." }
+            : prev,
+        );
+        return;
+      }
+
+      const used = new Set(
+        Object.values(data.datarooms).map((room) => room.name.toLowerCase()),
+      );
+      const finalName = makeUniqueName(normalized, used);
+      const dataroomId = createId();
+      const rootFolderId = createId();
+
+      const now = Date.now();
+      const newDataroom = {
+        id: dataroomId,
+        name: finalName,
+        rootFolderId,
+        createdAt: now,
+      };
+
+      const newRootFolder = {
+        id: rootFolderId,
+        name: "All documents",
+        parentId: null,
+        dataroomId,
+        childFolderIds: [],
+        fileIds: [],
+        createdAt: now,
+      };
+
+      if (user) {
+        try {
+          await firestoreCreateDataroom(newDataroom);
+          await firestoreCreateFolder(newRootFolder);
+          await firestoreSetActiveDataroomId(dataroomId);
+          await firestoreSetActiveFolderId(rootFolderId);
+
+          setData((prev) => ({
+            ...prev,
+            datarooms: {
+              ...prev.datarooms,
+              [dataroomId]: newDataroom,
+            },
+            folders: {
+              ...prev.folders,
+              [rootFolderId]: newRootFolder,
+            },
+            activeDataroomId: dataroomId,
+            activeFolderId: rootFolderId,
+          }));
+        } catch (error) {
+          toast.error("Failed to create data room");
+          console.error(error);
+          return;
+        }
+      } else {
+        setData((prev) => ({
+          ...prev,
+          datarooms: {
+            ...prev.datarooms,
+            [dataroomId]: newDataroom,
+          },
+          folders: {
+            ...prev.folders,
+            [rootFolderId]: newRootFolder,
+          },
+          activeDataroomId: dataroomId,
+          activeFolderId: rootFolderId,
+        }));
+      }
+
+      setExpandedFolders(dataroomId, [rootFolderId]);
+      setViewMode(DEFAULT_VIEW_MODE);
+      setViewModeStore(dataroomId, DEFAULT_VIEW_MODE);
+      setDialog(null);
+      clearSelection();
+      toast.success(`Data room "${finalName}" created.`);
+    },
+    [
+      data.datarooms,
+      user,
+      firestoreCreateDataroom,
+      firestoreCreateFolder,
+      firestoreSetActiveDataroomId,
+      firestoreSetActiveFolderId,
+      setViewModeStore,
+      setExpandedFolders,
+    ],
+  );
+
+  const handleRenameDataroom = async (id: string, name: string) => {
     const normalized = normalizeName(name);
     if (!normalized) {
       setDialog((prev) =>
-        prev && "error" in prev ? { ...prev, error: "Name is required." } : prev,
+        prev && "error" in prev
+          ? { ...prev, error: "Name is required." }
+          : prev,
       );
       return;
     }
@@ -245,18 +413,28 @@ export default function App() {
       return;
     }
 
-    setData((prev) => ({
-      ...prev,
-      datarooms: {
-        ...prev.datarooms,
-        [id]: { ...prev.datarooms[id], name: normalized },
-      },
-    }));
+    if (user) {
+      try {
+        await firestoreUpdateDataroom(id, { name: normalized });
+      } catch (error) {
+        toast.error("Failed to rename data room");
+        console.error(error);
+        return;
+      }
+    } else {
+      setData((prev) => ({
+        ...prev,
+        datarooms: {
+          ...prev.datarooms,
+          [id]: { ...prev.datarooms[id], name: normalized },
+        },
+      }));
+    }
     setDialog(null);
     toast.success("Data room renamed.");
   };
 
-  const handleDeleteDataroom = (id: string) => {
+  const handleDeleteDataroom = async (id: string) => {
     const dataroomList = Object.values(data.datarooms).sort((a, b) =>
       a.name.localeCompare(b.name),
     );
@@ -265,36 +443,71 @@ export default function App() {
     const nextActiveId = nextActiveRoom?.id ?? null;
     const nextRootId = nextActiveRoom?.rootFolderId ?? null;
 
-    setData((prev) => {
-      const nextDatarooms = { ...prev.datarooms };
-      const nextFolders = { ...prev.folders };
-      const nextFiles = { ...prev.files };
+    if (user) {
+      try {
+        const foldersToDelete = Object.values(data.folders).filter(
+          (folder) => folder.dataroomId === id,
+        );
+        const filesToDelete = Object.values(data.files).filter(
+          (file) => file.dataroomId === id,
+        );
 
-      delete nextDatarooms[id];
+        await firestoreDeleteDataroom(id);
+        await Promise.all(
+          foldersToDelete.map((folder) => firestoreDeleteFolder(folder.id)),
+        );
+        await Promise.all(
+          filesToDelete.map((file) => firestoreDeleteFile(file.id)),
+        );
 
-      Object.values(prev.folders)
-        .filter((folder) => folder.dataroomId === id)
-        .forEach((folder) => {
-          delete nextFolders[folder.id];
-        });
+        if (nextActiveId) {
+          await firestoreSetActiveDataroomId(nextActiveId);
+          await firestoreSetActiveFolderId(nextRootId);
+        } else {
+          await firestoreSetActiveDataroomId(null);
+          await firestoreSetActiveFolderId(null);
+        }
+      } catch (error) {
+        toast.error("Failed to delete data room");
+        console.error(error);
+        return;
+      }
+    } else {
+      setData((prev) => {
+        const nextDatarooms = { ...prev.datarooms };
+        const nextFolders = { ...prev.folders };
+        const nextFiles = { ...prev.files };
 
-      Object.values(prev.files)
-        .filter((file) => file.dataroomId === id)
-        .forEach((file) => {
-          if (file.blobUrl) URL.revokeObjectURL(file.blobUrl);
-          delete nextFiles[file.id];
-        });
+        delete nextDatarooms[id];
 
-      return {
-        datarooms: nextDatarooms,
-        folders: nextFolders,
-        files: nextFiles,
-        activeDataroomId: nextActiveId,
-        activeFolderId: nextRootId,
-      };
-    });
+        Object.values(prev.folders)
+          .filter((folder) => folder.dataroomId === id)
+          .forEach((folder) => {
+            delete nextFolders[folder.id];
+          });
 
-    setExpandedFolderIds(nextRootId ? new Set([nextRootId]) : new Set());
+        Object.values(prev.files)
+          .filter((file) => file.dataroomId === id)
+          .forEach((file) => {
+            if (file.blobUrl) URL.revokeObjectURL(file.blobUrl);
+            delete nextFiles[file.id];
+          });
+
+        return {
+          datarooms: nextDatarooms,
+          folders: nextFolders,
+          files: nextFiles,
+          activeDataroomId: nextActiveId,
+          activeFolderId: nextRootId,
+        };
+      });
+    }
+
+    if (nextActiveId && nextRootId) {
+      setExpandedFolders(nextActiveId, [nextRootId]);
+    } else if (nextActiveId) {
+      setExpandedFolders(nextActiveId, []);
+    }
     setViewMode(resolveViewMode(nextActiveId));
     setPreviewFileId(null);
     setDialog(null);
@@ -302,59 +515,85 @@ export default function App() {
     toast.info("Data room removed.");
   };
 
-  const handleCreateFolder = (parentId: string, name: string) => {
+  const handleCreateFolder = async (parentId: string, name: string) => {
     const normalized = normalizeName(name);
     if (!normalized) {
       setDialog((prev) =>
-        prev && "error" in prev ? { ...prev, error: "Name is required." } : prev,
+        prev && "error" in prev
+          ? { ...prev, error: "Name is required." }
+          : prev,
       );
       return;
     }
 
-    setData((prev) => {
-      const parent = prev.folders[parentId];
-      if (!parent) return prev;
-      const used = getSiblingNames(parentId, prev);
-      const finalName = makeUniqueName(normalized, used);
-      const folderId = createId();
-      const now = Date.now();
+    if (!parentId) {
+      toast.error("No parent folder selected");
+      setDialog(null);
+      return;
+    }
 
-      return {
+    const parent = data.folders[parentId];
+    if (!parent) {
+      toast.error("Parent folder not found");
+      setDialog(null);
+      return;
+    }
+
+    const used = getSiblingNames(parentId, data);
+    const finalName = makeUniqueName(normalized, used);
+    const folderId = createId();
+    const now = Date.now();
+
+    const newFolder = {
+      id: folderId,
+      name: finalName,
+      parentId,
+      dataroomId: parent.dataroomId,
+      childFolderIds: [],
+      fileIds: [],
+      createdAt: now,
+    };
+
+    if (user) {
+      try {
+        await firestoreCreateFolder(newFolder);
+        await firestoreUpdateFolder(parentId, {
+          childFolderIds: [...parent.childFolderIds, folderId],
+        });
+      } catch (error) {
+        toast.error("Failed to create folder");
+        console.error(error);
+        return;
+      }
+    } else {
+      setData((prev) => ({
         ...prev,
         folders: {
           ...prev.folders,
-          [folderId]: {
-            id: folderId,
-            name: finalName,
-            parentId,
-            dataroomId: parent.dataroomId,
-            childFolderIds: [],
-            fileIds: [],
-            createdAt: now,
-          },
+          [folderId]: newFolder,
           [parentId]: {
             ...parent,
             childFolderIds: [...parent.childFolderIds, folderId],
           },
         },
-      };
-    });
+      }));
+    }
 
-    setExpandedFolderIds((prev) => {
-      const next = new Set(prev);
-      next.add(parentId);
-      return next;
-    });
+    if (data.activeDataroomId) {
+      addFolder(data.activeDataroomId, parentId);
+    }
 
     setDialog(null);
     toast.success("Folder created.");
   };
 
-  const handleRenameFolder = (id: string, name: string) => {
+  const handleRenameFolder = async (id: string, name: string) => {
     const normalized = normalizeName(name);
     if (!normalized) {
       setDialog((prev) =>
-        prev && "error" in prev ? { ...prev, error: "Name is required." } : prev,
+        prev && "error" in prev
+          ? { ...prev, error: "Name is required." }
+          : prev,
       );
       return;
     }
@@ -372,19 +611,29 @@ export default function App() {
       return;
     }
 
-    setData((prev) => ({
-      ...prev,
-      folders: {
-        ...prev.folders,
-        [id]: { ...prev.folders[id], name: normalized },
-      },
-    }));
+    if (user) {
+      try {
+        await firestoreUpdateFolder(id, { name: normalized });
+      } catch (error) {
+        toast.error("Failed to rename folder");
+        console.error(error);
+        return;
+      }
+    } else {
+      setData((prev) => ({
+        ...prev,
+        folders: {
+          ...prev.folders,
+          [id]: { ...prev.folders[id], name: normalized },
+        },
+      }));
+    }
 
     setDialog(null);
     toast.success("Folder renamed.");
   };
 
-  const handleDeleteFolder = (id: string) => {
+  const handleDeleteFolder = async (id: string) => {
     const folder = data.folders[id];
     if (!folder) return;
 
@@ -398,63 +647,105 @@ export default function App() {
 
     const folderIdsToRemove = collectFolderIds(id, data);
 
-    setData((prev) => {
-      const nextFolders = { ...prev.folders };
-      const nextFiles = { ...prev.files };
-      const stack = [id];
-      const folderIdsToDelete = new Set<string>();
-      const fileIdsToDelete = new Set<string>();
+    const stack = [id];
+    const folderIdsToDelete = new Set<string>();
+    const fileIdsToDelete = new Set<string>();
 
-      while (stack.length > 0) {
-        const currentId = stack.pop();
-        if (!currentId) continue;
-        const currentFolder = nextFolders[currentId];
-        if (!currentFolder) continue;
-        folderIdsToDelete.add(currentId);
-        currentFolder.childFolderIds.forEach((childId) => stack.push(childId));
-        currentFolder.fileIds.forEach((fileId) => fileIdsToDelete.add(fileId));
-      }
+    while (stack.length > 0) {
+      const currentId = stack.pop();
+      if (!currentId) continue;
+      const currentFolder = data.folders[currentId];
+      if (!currentFolder) continue;
+      folderIdsToDelete.add(currentId);
+      currentFolder.childFolderIds.forEach((childId) => stack.push(childId));
+      currentFolder.fileIds.forEach((fileId) => fileIdsToDelete.add(fileId));
+    }
 
-      folderIdsToDelete.forEach((folderId) => {
-        delete nextFolders[folderId];
-      });
-
-      fileIdsToDelete.forEach((fileId) => {
-        const file = nextFiles[fileId];
-        if (file?.blobUrl) URL.revokeObjectURL(file.blobUrl);
-        delete nextFiles[fileId];
-      });
-
-      const parentFolder = nextFolders[folder.parentId ?? ""];
-      if (parentFolder) {
-        nextFolders[parentFolder.id] = {
-          ...parentFolder,
-          childFolderIds: parentFolder.childFolderIds.filter(
-            (childId) => childId !== id,
+    if (user) {
+      try {
+        await Promise.all(
+          Array.from(folderIdsToDelete).map((folderId) =>
+            firestoreDeleteFolder(folderId),
           ),
-        };
+        );
+        await Promise.all(
+          Array.from(fileIdsToDelete).map((fileId) =>
+            firestoreDeleteFile(fileId),
+          ),
+        );
+
+        const parentFolder = data.folders[folder.parentId ?? ""];
+        if (parentFolder) {
+          await firestoreUpdateFolder(parentFolder.id, {
+            childFolderIds: parentFolder.childFolderIds.filter(
+              (childId) => childId !== id,
+            ),
+          });
+        }
+
+        const nextActiveFolderId =
+          data.activeFolderId && folderIdsToDelete.has(data.activeFolderId)
+            ? (parentFolder?.id ?? data.activeFolderId)
+            : data.activeFolderId;
+
+        if (nextActiveFolderId !== data.activeFolderId) {
+          await firestoreSetActiveFolderId(nextActiveFolderId);
+        }
+      } catch (error) {
+        toast.error("Failed to delete folder");
+        console.error(error);
+        return;
       }
+    } else {
+      setData((prev) => {
+        const nextFolders = { ...prev.folders };
+        const nextFiles = { ...prev.files };
 
-      const nextActiveFolderId =
-        prev.activeFolderId && folderIdsToDelete.has(prev.activeFolderId)
-          ? parentFolder?.id ?? prev.activeFolderId
-          : prev.activeFolderId;
+        folderIdsToDelete.forEach((folderId) => {
+          delete nextFolders[folderId];
+        });
 
-      return {
-        ...prev,
-        folders: nextFolders,
-        files: nextFiles,
-        activeFolderId: nextActiveFolderId ?? prev.activeFolderId,
-      };
-    });
+        fileIdsToDelete.forEach((fileId) => {
+          const file = nextFiles[fileId];
+          if (file?.blobUrl) URL.revokeObjectURL(file.blobUrl);
+          delete nextFiles[fileId];
+        });
+
+        const parentFolder = nextFolders[folder.parentId ?? ""];
+        if (parentFolder) {
+          nextFolders[parentFolder.id] = {
+            ...parentFolder,
+            childFolderIds: parentFolder.childFolderIds.filter(
+              (childId) => childId !== id,
+            ),
+          };
+        }
+
+        const nextActiveFolderId =
+          prev.activeFolderId && folderIdsToDelete.has(prev.activeFolderId)
+            ? (parentFolder?.id ?? prev.activeFolderId)
+            : prev.activeFolderId;
+
+        return {
+          ...prev,
+          folders: nextFolders,
+          files: nextFiles,
+          activeFolderId: nextActiveFolderId ?? prev.activeFolderId,
+        };
+      });
+    }
 
     setDialog(null);
     setPreviewFileId(null);
-    setExpandedFolderIds((prev) => {
-      const next = new Set(prev);
-      folderIdsToRemove.forEach((folderId) => next.delete(folderId));
-      return next;
-    });
+    if (data.activeDataroomId) {
+      const current = getExpandedFolders(data.activeDataroomId);
+      const dataroomId = data.activeDataroomId;
+      folderIdsToRemove.forEach((id) => {
+        if (current.has(id)) {
+          removeFolderFromStore(dataroomId, id);
+        }
+      });
+    }
     setSelection((prev) => {
       const nextFolders = new Set(prev.folders);
       const nextFiles = new Set(prev.files);
@@ -474,7 +765,10 @@ export default function App() {
     toast.info("Folder deleted.");
   };
 
-  const handleUploadFiles = (files: FileList | File[], folderId: string) => {
+  const handleUploadFiles = async (
+    files: FileList | File[],
+    folderId: string,
+  ) => {
     const fileArray = Array.from(files);
     const validFiles = fileArray.filter(isPdfFile);
     const invalidCount = fileArray.length - validFiles.length;
@@ -484,40 +778,96 @@ export default function App() {
       return;
     }
 
+    toast.info(
+      "Files are stored locally in your browser. They will not be synced to Firebase Storage.",
+      { duration: 5000 },
+    );
+
+    const parent = data.folders[folderId];
+    if (!parent) return;
+
+    const usedNames = getSiblingNames(folderId, data);
+    const newFiles: FileItem[] = [];
     let previewId: string | null = null;
-    setData((prev) => {
-      const parent = prev.folders[folderId];
-      if (!parent) return prev;
-      const usedNames = getSiblingNames(folderId, prev);
-      const nextFiles = { ...prev.files };
-      const nextFolder = { ...parent, fileIds: [...parent.fileIds] };
+    const now = Date.now();
 
-      validFiles.forEach((file) => {
-        const fileId = createId();
-        const uniqueName = makeUniqueFilename(file.name, usedNames);
-        usedNames.add(uniqueName.toLowerCase());
-        const blobUrl = URL.createObjectURL(file);
-        const newFile: FileItem = {
-          id: fileId,
-          name: uniqueName,
-          parentFolderId: folderId,
-          dataroomId: parent.dataroomId,
-          size: file.size,
-          createdAt: Date.now(),
-          blobUrl,
-          source: "upload",
+    if (user) {
+      try {
+        const uploadPromises = validFiles.map(async (file) => {
+          const fileId = createId();
+          const uniqueName = makeUniqueFilename(file.name, usedNames);
+          usedNames.add(uniqueName.toLowerCase());
+
+          const blobUrl = await saveFileToIndexedDB(user.uid, fileId, file);
+
+          const newFile: FileItem = {
+            id: fileId,
+            name: uniqueName,
+            parentFolderId: folderId,
+            dataroomId: parent.dataroomId,
+            size: file.size,
+            createdAt: now,
+            blobUrl,
+            source: "upload",
+          };
+
+          await firestoreCreateFile(newFile);
+          return newFile;
+        });
+
+        const uploadedFiles = await Promise.all(uploadPromises);
+        newFiles.push(...uploadedFiles);
+        if (uploadedFiles.length > 0) previewId = uploadedFiles[0].id;
+
+        const updatedFileIds = [
+          ...(parent.fileIds || []),
+          ...uploadedFiles.map((f) => f.id),
+        ];
+        await firestoreUpdateFolder(folderId, {
+          fileIds: updatedFileIds,
+        });
+
+        setData((prev) => {
+          const nextFiles = { ...prev.files };
+          const currentParent = prev.folders[folderId] || parent;
+          const nextFolder = { ...currentParent, fileIds: updatedFileIds };
+
+          uploadedFiles.forEach((file) => {
+            nextFiles[file.id] = file;
+          });
+
+          return {
+            ...prev,
+            files: nextFiles,
+            folders: { ...prev.folders, [folderId]: nextFolder },
+          };
+        });
+      } catch (error) {
+        toast.error("Failed to upload files");
+        console.error(error);
+        return;
+      }
+    } else {
+      setData((prev) => {
+        const nextFiles = { ...prev.files };
+        const currentParent = prev.folders[folderId] || parent;
+        const nextFolder = {
+          ...currentParent,
+          fileIds: [...(currentParent.fileIds || [])],
         };
-        nextFiles[fileId] = newFile;
-        nextFolder.fileIds.push(fileId);
-        if (!previewId) previewId = fileId;
-      });
 
-      return {
-        ...prev,
-        files: nextFiles,
-        folders: { ...prev.folders, [folderId]: nextFolder },
-      };
-    });
+        newFiles.forEach((file) => {
+          nextFiles[file.id] = file;
+          nextFolder.fileIds.push(file.id);
+        });
+
+        return {
+          ...prev,
+          files: nextFiles,
+          folders: { ...prev.folders, [folderId]: nextFolder },
+        };
+      });
+    }
 
     if (previewId) {
       setPreviewFileId(previewId);
@@ -531,11 +881,13 @@ export default function App() {
     }
   };
 
-  const handleRenameFile = (id: string, name: string) => {
+  const handleRenameFile = async (id: string, name: string) => {
     const normalized = normalizeName(name);
     if (!normalized) {
       setDialog((prev) =>
-        prev && "error" in prev ? { ...prev, error: "Name is required." } : prev,
+        prev && "error" in prev
+          ? { ...prev, error: "Name is required." }
+          : prev,
       );
       return;
     }
@@ -557,40 +909,76 @@ export default function App() {
       return;
     }
 
-    setData((prev) => ({
-      ...prev,
-      files: {
-        ...prev.files,
-        [id]: { ...prev.files[id], name: finalName },
-      },
-    }));
+    if (user) {
+      try {
+        await firestoreUpdateFile(id, { name: finalName });
+      } catch (error) {
+        toast.error("Failed to rename file");
+        console.error(error);
+        return;
+      }
+    } else {
+      setData((prev) => ({
+        ...prev,
+        files: {
+          ...prev.files,
+          [id]: { ...prev.files[id], name: finalName },
+        },
+      }));
+    }
 
     setDialog(null);
     toast.success("File renamed.");
   };
 
-  const handleDeleteFile = (id: string) => {
+  const handleDeleteFile = async (id: string) => {
     const file = data.files[id];
     if (!file) return;
 
-    setData((prev) => {
-      const nextFiles = { ...prev.files };
-      const parent = prev.folders[file.parentFolderId];
-      if (file.blobUrl) URL.revokeObjectURL(file.blobUrl);
-      delete nextFiles[id];
+    const parent = data.folders[file.parentFolderId];
 
-      if (!parent) return { ...prev, files: nextFiles };
-      const nextParent = {
-        ...parent,
-        fileIds: parent.fileIds.filter((fileId) => fileId !== id),
-      };
+    if (user) {
+      try {
+        if (file.blobUrl) {
+          try {
+            await deleteFileFromIndexedDB(user.uid, id);
+            URL.revokeObjectURL(file.blobUrl);
+          } catch (storageError) {
+            console.warn("Failed to delete file from IndexedDB:", storageError);
+          }
+        }
+        await firestoreDeleteFile(id);
+        if (parent) {
+          await firestoreUpdateFolder(parent.id, {
+            fileIds: parent.fileIds.filter((fileId) => fileId !== id),
+          });
+        }
+      } catch (error) {
+        toast.error("Failed to delete file");
+        console.error(error);
+        return;
+      }
+    } else {
+      setData((prev) => {
+        const nextFiles = { ...prev.files };
+        if (file.blobUrl) URL.revokeObjectURL(file.blobUrl);
+        delete nextFiles[id];
 
-      return {
-        ...prev,
-        files: nextFiles,
-        folders: { ...prev.folders, [parent.id]: nextParent },
-      };
-    });
+        if (!parent) return { ...prev, files: nextFiles };
+        const nextParent = {
+          ...parent,
+          fileIds: parent.fileIds.filter((fileId) => fileId !== id),
+        };
+
+        return {
+          ...prev,
+          files: nextFiles,
+          folders: { ...prev.folders, [parent.id]: nextParent },
+        };
+      });
+    }
+
+    if (file.blobUrl) URL.revokeObjectURL(file.blobUrl);
 
     if (previewFileId === id) {
       setPreviewFileId(null);
@@ -615,9 +1003,6 @@ export default function App() {
       handleUploadFiles(files, activeFolder.id);
     }
   };
-
-  const clearSelection = () =>
-    setSelection({ folders: new Set(), files: new Set() });
 
   const handleToggleFolderSelection = (id: string) => {
     setSelection((prev) => {
@@ -658,8 +1043,7 @@ export default function App() {
   ): DragPayload => {
     const folderIds = selection.folders;
     const fileIds = selection.files;
-    const isSelected =
-      type === "folder" ? folderIds.has(id) : fileIds.has(id);
+    const isSelected = type === "folder" ? folderIds.has(id) : fileIds.has(id);
 
     if (isSelected) {
       return {
@@ -708,124 +1092,179 @@ export default function App() {
     event.dataTransfer.dropEffect = "move";
   };
 
-  const moveItemsToFolder = (
+  const moveItemsToFolder = async (
     targetFolderId: string,
     folderIds: string[],
     fileIds: string[],
   ) => {
     if (!targetFolderId) return;
 
-    let movedFolders = 0;
-    let movedFiles = 0;
+    const targetFolder = data.folders[targetFolderId];
+    if (!targetFolder) return;
+
+    const usedNames = getSiblingNames(targetFolderId, data);
+    const movedFolderIds: string[] = [];
+    const movedFileIds: string[] = [];
     let skippedCount = 0;
 
-    setData((prev) => {
-      const targetFolder = prev.folders[targetFolderId];
-      if (!targetFolder) return prev;
+    const folderUpdates: Array<{ id: string; updates: Partial<Folder> }> = [];
+    const fileUpdates: Array<{ id: string; updates: Partial<FileItem> }> = [];
+    const parentFolderUpdates: Map<string, Partial<Folder>> = new Map();
 
-      const nextFolders = { ...prev.folders };
-      const nextFiles = { ...prev.files };
-      const usedNames = getSiblingNames(targetFolderId, prev);
-      const movedFolderIds: string[] = [];
-      const movedFileIds: string[] = [];
+    folderIds.forEach((folderId) => {
+      const folder = data.folders[folderId];
+      if (!folder) return;
+      if (folder.parentId === targetFolderId) return;
 
-      folderIds.forEach((folderId) => {
-        const folder = nextFolders[folderId];
-        if (!folder) return;
-        if (folder.parentId === targetFolderId) return;
-
-        const descendants = collectFolderIds(folderId, prev);
-        if (descendants.has(targetFolderId)) {
-          skippedCount += 1;
-          return;
-        }
-
-        const nextName = makeUniqueName(folder.name, usedNames);
-        usedNames.add(nextName.toLowerCase());
-
-        const parentFolder = folder.parentId
-          ? nextFolders[folder.parentId]
-          : null;
-        if (parentFolder) {
-          nextFolders[parentFolder.id] = {
-            ...parentFolder,
-            childFolderIds: parentFolder.childFolderIds.filter(
-              (childId) => childId !== folderId,
-            ),
-          };
-        }
-
-        nextFolders[folderId] = {
-          ...folder,
-          name: nextName,
-          parentId: targetFolderId,
-        };
-        movedFolderIds.push(folderId);
-      });
-
-      fileIds.forEach((fileId) => {
-        const file = nextFiles[fileId];
-        if (!file) return;
-        if (file.parentFolderId === targetFolderId) return;
-
-        const nextName = makeUniqueFilename(file.name, usedNames);
-        usedNames.add(nextName.toLowerCase());
-
-        const parentFolder = nextFolders[file.parentFolderId];
-        if (parentFolder) {
-          nextFolders[parentFolder.id] = {
-            ...parentFolder,
-            fileIds: parentFolder.fileIds.filter(
-              (itemId) => itemId !== fileId,
-            ),
-          };
-        }
-
-        nextFiles[fileId] = {
-          ...file,
-          name: nextName,
-          parentFolderId: targetFolderId,
-        };
-        movedFileIds.push(fileId);
-      });
-
-      if (movedFolderIds.length === 0 && movedFileIds.length === 0) {
-        return prev;
+      const descendants = collectFolderIds(folderId, data);
+      if (descendants.has(targetFolderId)) {
+        skippedCount += 1;
+        return;
       }
 
-      const updatedTarget = {
-        ...nextFolders[targetFolderId],
-        childFolderIds: [
-          ...nextFolders[targetFolderId].childFolderIds,
-          ...movedFolderIds.filter(
-            (id) => !nextFolders[targetFolderId].childFolderIds.includes(id),
-          ),
-        ],
-        fileIds: [
-          ...nextFolders[targetFolderId].fileIds,
-          ...movedFileIds.filter(
-            (id) => !nextFolders[targetFolderId].fileIds.includes(id),
-          ),
-        ],
-      };
+      const nextName = makeUniqueName(folder.name, usedNames);
+      usedNames.add(nextName.toLowerCase());
 
-      nextFolders[targetFolderId] = updatedTarget;
-      movedFolders = movedFolderIds.length;
-      movedFiles = movedFileIds.length;
+      const parentFolder = folder.parentId
+        ? data.folders[folder.parentId]
+        : null;
+      if (parentFolder) {
+        const existing = parentFolderUpdates.get(parentFolder.id);
+        const currentUpdates: Partial<Folder> = existing || {
+          childFolderIds: [...parentFolder.childFolderIds],
+          fileIds: [...parentFolder.fileIds],
+        };
+        currentUpdates.childFolderIds = (
+          currentUpdates.childFolderIds || [...parentFolder.childFolderIds]
+        ).filter((childId) => childId !== folderId);
+        parentFolderUpdates.set(parentFolder.id, currentUpdates);
+      }
 
-      return {
-        ...prev,
-        folders: nextFolders,
-        files: nextFiles,
-      };
+      folderUpdates.push({
+        id: folderId,
+        updates: { name: nextName, parentId: targetFolderId },
+      });
+      movedFolderIds.push(folderId);
     });
 
-    if (movedFolders + movedFiles > 0) {
-      setExpandedFolderIds((prev) => {
-        const next = new Set(prev);
-        next.add(targetFolderId);
-        return next;
+    fileIds.forEach((fileId) => {
+      const file = data.files[fileId];
+      if (!file) return;
+      if (file.parentFolderId === targetFolderId) return;
+
+      const nextName = makeUniqueFilename(file.name, usedNames);
+      usedNames.add(nextName.toLowerCase());
+
+      const parentFolder = data.folders[file.parentFolderId];
+      if (parentFolder) {
+        const existing = parentFolderUpdates.get(parentFolder.id);
+        const currentUpdates: Partial<Folder> = existing || {
+          childFolderIds: [...parentFolder.childFolderIds],
+          fileIds: [...parentFolder.fileIds],
+        };
+        currentUpdates.fileIds = (
+          currentUpdates.fileIds || [...parentFolder.fileIds]
+        ).filter((itemId) => itemId !== fileId);
+        parentFolderUpdates.set(parentFolder.id, currentUpdates);
+      }
+
+      fileUpdates.push({
+        id: fileId,
+        updates: { name: nextName, parentFolderId: targetFolderId },
       });
+      movedFileIds.push(fileId);
+    });
+
+    if (movedFolderIds.length === 0 && movedFileIds.length === 0) {
+      toast.info("Nothing to move.");
+      return;
+    }
+
+    if (user) {
+      try {
+        await Promise.all(
+          folderUpdates.map(({ id, updates }) =>
+            firestoreUpdateFolder(id, updates),
+          ),
+        );
+        await Promise.all(
+          fileUpdates.map(({ id, updates }) =>
+            firestoreUpdateFile(id, updates),
+          ),
+        );
+        await Promise.all(
+          Array.from(parentFolderUpdates.entries()).map(([id, updates]) =>
+            firestoreUpdateFolder(id, updates),
+          ),
+        );
+
+        const updatedTarget = {
+          childFolderIds: [
+            ...targetFolder.childFolderIds,
+            ...movedFolderIds.filter(
+              (id) => !targetFolder.childFolderIds.includes(id),
+            ),
+          ],
+          fileIds: [
+            ...targetFolder.fileIds,
+            ...movedFileIds.filter((id) => !targetFolder.fileIds.includes(id)),
+          ],
+        };
+        await firestoreUpdateFolder(targetFolderId, updatedTarget);
+      } catch (error) {
+        toast.error("Failed to move items");
+        console.error(error);
+        return;
+      }
+    } else {
+      setData((prev) => {
+        const nextFolders = { ...prev.folders };
+        const nextFiles = { ...prev.files };
+
+        folderUpdates.forEach(({ id, updates }) => {
+          nextFolders[id] = { ...nextFolders[id], ...updates };
+        });
+
+        fileUpdates.forEach(({ id, updates }) => {
+          nextFiles[id] = { ...nextFiles[id], ...updates };
+        });
+
+        parentFolderUpdates.forEach((updates, id) => {
+          nextFolders[id] = { ...nextFolders[id], ...updates };
+        });
+
+        const updatedTarget = {
+          ...nextFolders[targetFolderId],
+          childFolderIds: [
+            ...nextFolders[targetFolderId].childFolderIds,
+            ...movedFolderIds.filter(
+              (id) => !nextFolders[targetFolderId].childFolderIds.includes(id),
+            ),
+          ],
+          fileIds: [
+            ...nextFolders[targetFolderId].fileIds,
+            ...movedFileIds.filter(
+              (id) => !nextFolders[targetFolderId].fileIds.includes(id),
+            ),
+          ],
+        };
+        nextFolders[targetFolderId] = updatedTarget;
+
+        return {
+          ...prev,
+          folders: nextFolders,
+          files: nextFiles,
+        };
+      });
+    }
+
+    const movedFolders = movedFolderIds.length;
+    const movedFiles = movedFileIds.length;
+
+    if (movedFolders + movedFiles > 0) {
+      if (data.activeDataroomId) {
+        addFolder(data.activeDataroomId, targetFolderId);
+      }
       clearSelection();
       toast.success(`Moved ${movedFolders + movedFiles} item(s).`);
     } else {
@@ -905,7 +1344,7 @@ export default function App() {
       const activeFolderId =
         prev.activeFolderId && !nextFolders[prev.activeFolderId]
           ? prev.activeDataroomId
-            ? prev.datarooms[prev.activeDataroomId]?.rootFolderId ?? null
+            ? (prev.datarooms[prev.activeDataroomId]?.rootFolderId ?? null)
             : null
           : prev.activeFolderId;
 
@@ -918,11 +1357,15 @@ export default function App() {
     });
 
     if (deletedFolderIds.size + deletedFileIds.size > 0) {
-      setExpandedFolderIds((prev) => {
-        const next = new Set(prev);
-        deletedFolderIds.forEach((id) => next.delete(id));
-        return next;
-      });
+      if (data.activeDataroomId) {
+        const current = getExpandedFolders(data.activeDataroomId);
+        const dataroomId = data.activeDataroomId;
+        deletedFolderIds.forEach((id) => {
+          if (current.has(id)) {
+            removeFolderFromStore(dataroomId, id);
+          }
+        });
+      }
       if (previewFileId && deletedFileIds.has(previewFileId)) {
         setPreviewFileId(null);
       }
@@ -996,173 +1439,252 @@ export default function App() {
     activeDataroom?.rootFolderId ??
     "";
 
+  if (!isFirebaseConfigured) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-ink px-6">
+        <div className="text-center max-w-2xl">
+          <h1 className="font-display text-2xl mb-4">
+            Firebase Configuration Required
+          </h1>
+          <p className="text-muted mb-4">
+            Please set up Firebase Authentication to use this application.
+          </p>
+          <div className="bg-white/70 rounded-lg border border-border p-6 text-left">
+            <p className="text-sm font-medium mb-2">Quick Setup:</p>
+            <ol className="text-sm text-muted space-y-2 list-decimal list-inside">
+              <li>
+                Create a Firebase project at{" "}
+                <a
+                  href="https://console.firebase.google.com/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent hover:underline"
+                >
+                  Firebase Console
+                </a>
+              </li>
+              <li>Add a web app to your Firebase project</li>
+              <li>
+                Enable Authentication → Email/Password (and optionally Google)
+              </li>
+              <li>
+                Copy <code className="bg-white px-1 rounded">.env.example</code>{" "}
+                to <code className="bg-white px-1 rounded">.env.local</code>
+              </li>
+              <li>
+                Fill in your Firebase config values in{" "}
+                <code className="bg-white px-1 rounded">.env.local</code>
+              </li>
+              <li>Restart the dev server</li>
+            </ol>
+            <p className="text-xs text-muted mt-4">
+              See{" "}
+              <code className="bg-white px-1 rounded">FIREBASE_SETUP.md</code>{" "}
+              for detailed instructions.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-ink">
+        <div className="text-center">
+          <p className="text-muted">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen text-ink">
       <div className="mx-auto flex max-w-10xl flex-col gap-8 px-6 py-10">
-        {/* Header */}
         <Header
           onCreateDataroom={() => setDialog({ type: "create-dataroom" })}
           onLoadDemo={handleCreateDemo}
         />
 
-        {/* Main Content */}
-        <main className="flex flex-col gap-6">
-          {dataroomList.length > 0 && (
-            <DataroomPanel
-              datarooms={dataroomList}
-              activeDataroomId={data.activeDataroomId}
-              appState={data}
-              onSelect={selectDataroom}
-              onRename={(id, name) =>
-                setDialog({
-                  type: "rename-dataroom",
-                  id,
-                  currentName: name,
-                })
-              }
-              onDelete={(id) =>
-                setDialog({
-                  type: "confirm-delete-dataroom",
-                  id,
-                })
-              }
-              onCreate={() => setDialog({ type: "create-dataroom" })}
-            />
-          )}
+        {user && (
+          <main className="flex flex-col gap-6">
+            {dataroomList.length > 0 && (
+              <DataroomPanel
+                datarooms={dataroomList}
+                activeDataroomId={data.activeDataroomId}
+                appState={data}
+                onSelect={selectDataroom}
+                onRename={(id, name) =>
+                  setDialog({
+                    type: "rename-dataroom",
+                    id,
+                    currentName: name,
+                  })
+                }
+                onDelete={(id) =>
+                  setDialog({
+                    type: "confirm-delete-dataroom",
+                    id,
+                  })
+                }
+                onCreate={() => setDialog({ type: "create-dataroom" })}
+              />
+            )}
 
-          {activeDataroom && activeFolder ? (
-            <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
-              <FolderPanel
-                dataroom={activeDataroom}
-                folders={data.folders}
-                activeFolderId={data.activeFolderId}
-                expandedFolderIds={expandedFolderIds}
-                onSelect={handleSelectFolder}
-                onToggle={(folderId) => {
-                  setExpandedFolderIds((prev) => {
-                    const next = new Set(prev);
-                    if (next.has(folderId)) {
-                      next.delete(folderId);
-                    } else {
-                      next.add(folderId);
+            {activeDataroom &&
+            activeFolder &&
+            Object.keys(data.datarooms).length > 0 ? (
+              <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
+                <FolderPanel
+                  dataroom={activeDataroom}
+                  folders={data.folders}
+                  activeFolderId={data.activeFolderId}
+                  expandedFolderIds={expandedFolderIds}
+                  onSelect={handleSelectFolder}
+                  onToggle={(folderId) => {
+                    if (data.activeDataroomId) {
+                      const current = getExpandedFolders(data.activeDataroomId);
+                      if (current.has(folderId)) {
+                        removeFolderFromStore(data.activeDataroomId, folderId);
+                      } else {
+                        addFolder(data.activeDataroomId, folderId);
+                      }
                     }
-                    return next;
-                  });
-                }}
-                onRename={(folderId) =>
-                  setDialog({
-                    type: "rename-folder",
-                    id: folderId,
-                    currentName: data.folders[folderId]?.name ?? "",
-                  })
-                }
-                onDelete={(folderId) =>
-                  setDialog({
-                    type: "confirm-delete-folder",
-                    id: folderId,
-                  })
-                }
-                onCreateFolder={() =>
-                  setDialog({
-                    type: "create-folder",
-                    parentId: activeFolder.id,
-                  })
-                }
-                onDropItems={handleDropOnFolder}
-                onDragOverFolder={handleDragOverFolder}
-                onDragStartFolder={(event, folderId) =>
-                  handleDragStartItem(event, "folder", folderId)
-                }
-              />
-
-              <DocumentsPanel
-                dataroom={activeDataroom}
-                activeFolder={activeFolder}
-                filteredFolders={filteredFolders}
-                filteredFiles={filteredFiles}
-                searchQuery={searchQuery}
-                previewFileId={previewFileId}
-                dragActive={dragActive}
-                folderPath={folderPath}
-                viewMode={viewMode}
-                onViewModeChange={handleViewModeChange}
-                selectedFolderIds={selection.folders}
-                selectedFileIds={selection.files}
-                onSelectAllVisible={handleSelectAllVisible}
-                onClearSelection={clearSelection}
-                onToggleFolderSelection={handleToggleFolderSelection}
-                onToggleFileSelection={handleToggleFileSelection}
-                onBulkMove={handleBulkMove}
-                onBulkDelete={handleBulkDeleteConfirm}
-                onSearchChange={setSearchQuery}
-                onCreateFolder={() =>
-                  setDialog({
-                    type: "create-folder",
-                    parentId: activeFolder.id,
-                  })
-                }
-                onUploadFiles={(files: FileList | File[]) =>
-                  handleUploadFiles(files, activeFolder.id)
-                }
-                onSelectFolder={handleSelectFolder}
-                onSelectFile={(fileId: string | null) => {
-                  setPreviewFileId(fileId);
-                  const file = fileId ? data.files[fileId] : null;
-                  if (fileId && !file?.blobUrl) {
-                    toast.info(
-                      "Preview becomes available after the PDF is uploaded.",
-                    );
+                  }}
+                  onCreateFolder={() => {
+                    const parentId =
+                      activeFolder?.id || activeDataroom?.rootFolderId;
+                    if (!parentId) {
+                      toast.error("Please select a folder first");
+                      return;
+                    }
+                    setDialog({
+                      type: "create-folder",
+                      parentId,
+                    });
+                  }}
+                  onDropItems={handleDropOnFolder}
+                  onDragOverFolder={handleDragOverFolder}
+                  onDragStartFolder={(event, folderId) =>
+                    handleDragStartItem(event, "folder", folderId)
                   }
-                }}
-                onRenameFolder={(folderId) =>
-                  setDialog({
-                    type: "rename-folder",
-                    id: folderId,
-                    currentName: data.folders[folderId]?.name ?? "",
-                  })
-                }
-                onDeleteFolder={(folderId) =>
-                  setDialog({
-                    type: "confirm-delete-folder",
-                    id: folderId,
-                  })
-                }
-                onRenameFile={(fileId) =>
-                  setDialog({
-                    type: "rename-file",
-                    id: fileId,
-                    currentName: data.files[fileId]?.name ?? "",
-                  })
-                }
-                onDeleteFile={(fileId) =>
-                  setDialog({
-                    type: "confirm-delete-file",
-                    id: fileId,
-                  })
-                }
-                onDragStartItem={handleDragStartItem}
-                onDragOverFolder={handleDragOverFolder}
-                onDropOnFolder={handleDropOnFolder}
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  setDragActive(true);
-                }}
-                onDragLeave={() => setDragActive(false)}
-                onDrop={handleDrop}
+                />
+
+                <DocumentsPanel
+                  dataroom={activeDataroom}
+                  activeFolder={activeFolder}
+                  filteredFolders={filteredFolders}
+                  filteredFiles={filteredFiles}
+                  searchQuery={searchQuery}
+                  previewFileId={previewFileId}
+                  dragActive={dragActive}
+                  folderPath={folderPath}
+                  viewMode={viewMode}
+                  onViewModeChange={handleViewModeChange}
+                  selectedFolderIds={selection.folders}
+                  selectedFileIds={selection.files}
+                  onSelectAllVisible={handleSelectAllVisible}
+                  onClearSelection={clearSelection}
+                  onToggleFolderSelection={handleToggleFolderSelection}
+                  onToggleFileSelection={handleToggleFileSelection}
+                  onBulkMove={handleBulkMove}
+                  onBulkDelete={handleBulkDeleteConfirm}
+                  onSearchChange={setSearchQuery}
+                  onCreateFolder={() => {
+                    const parentId =
+                      activeFolder?.id || activeDataroom?.rootFolderId;
+                    if (!parentId) {
+                      toast.error("Please select a folder first");
+                      return;
+                    }
+                    setDialog({
+                      type: "create-folder",
+                      parentId,
+                    });
+                  }}
+                  onUploadFiles={(files: FileList | File[]) =>
+                    handleUploadFiles(files, activeFolder.id)
+                  }
+                  onSelectFolder={handleSelectFolder}
+                  onSelectFile={(fileId: string | null) => {
+                    setPreviewFileId(fileId);
+                    const file = fileId ? data.files[fileId] : null;
+                    if (fileId && !file?.blobUrl) {
+                      toast.info(
+                        "Preview becomes available after the PDF is uploaded.",
+                      );
+                    }
+                  }}
+                  onRenameFolder={(folderId) =>
+                    setDialog({
+                      type: "rename-folder",
+                      id: folderId,
+                      currentName: data.folders[folderId]?.name ?? "",
+                    })
+                  }
+                  onDeleteFolder={(folderId) =>
+                    setDialog({
+                      type: "confirm-delete-folder",
+                      id: folderId,
+                    })
+                  }
+                  onRenameFile={(fileId) =>
+                    setDialog({
+                      type: "rename-file",
+                      id: fileId,
+                      currentName: data.files[fileId]?.name ?? "",
+                    })
+                  }
+                  onDeleteFile={(fileId) =>
+                    setDialog({
+                      type: "confirm-delete-file",
+                      id: fileId,
+                    })
+                  }
+                  onDragStartItem={handleDragStartItem}
+                  onDragOverFolder={handleDragOverFolder}
+                  onDropOnFolder={handleDropOnFolder}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    setDragActive(true);
+                  }}
+                  onDragLeave={() => setDragActive(false)}
+                  onDrop={handleDrop}
+                />
+              </div>
+            ) : (
+              <EmptyDataroom
+                onCreateDataroom={() => setDialog({ type: "create-dataroom" })}
+                onLoadDemo={handleCreateDemo}
               />
-            </div>
-          ) : (
-            <EmptyDataroom
-              onCreateDataroom={() => setDialog({ type: "create-dataroom" })}
-              onLoadDemo={handleCreateDemo}
-            />
-          )}
-        </main>
+            )}
+          </main>
+        )}
       </div>
 
       <Toaster position="top-right" richColors />
 
-      {/* Dialogs */}
+      {!user && authDialog === "login" && (
+        <LoginDialog
+          onClose={() => setAuthDialog(null)}
+          onSwitchToSignUp={() => setAuthDialog("signup")}
+        />
+      )}
+
+      {!user && authDialog === "signup" && (
+        <SignUpDialog
+          onClose={() => setAuthDialog(null)}
+          onSwitchToLogin={() => setAuthDialog("login")}
+        />
+      )}
+
+      {!user && !authDialog && (
+        <LoginDialog
+          onClose={() => {}}
+          onSwitchToSignUp={() => setAuthDialog("signup")}
+        />
+      )}
+
       {dialog?.type === "create-dataroom" && (
         <NameDialog
           title="Create data room"
@@ -1177,7 +1699,10 @@ export default function App() {
       )}
 
       {previewFile && (
-        <FilePreview file={previewFile} onClose={() => setPreviewFileId(null)} />
+        <FilePreview
+          file={previewFile}
+          onClose={() => setPreviewFileId(null)}
+        />
       )}
 
       {dialog?.type === "rename-dataroom" && (

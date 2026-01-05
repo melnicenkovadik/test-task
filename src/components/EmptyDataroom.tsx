@@ -16,7 +16,8 @@ export function EmptyDataroom({
       <div className="rounded-3xl border border-border bg-white/70 p-10 text-center shadow-card">
         <h2 className="font-display text-2xl">Start a new data room</h2>
         <p className="mt-3 text-sm text-muted">
-          Create a workspace to organize folders and PDF files for due diligence.
+          Create a workspace to organize folders and PDF files for due
+          diligence.
         </p>
         <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
           <button
@@ -31,7 +32,7 @@ export function EmptyDataroom({
             onClick={onLoadDemo}
           >
             <SparkIcon />
-            Load demo data
+            Load demo local data
           </button>
         </div>
       </div>

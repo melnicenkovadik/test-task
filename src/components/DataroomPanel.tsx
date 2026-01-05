@@ -89,9 +89,7 @@ export function DataroomPanel({
               <div className="mt-3 flex items-center gap-1 opacity-100 transition lg:opacity-0 lg:group-hover:opacity-100">
                 <button
                   className={buttonStyles.icon}
-                  onClick={() =>
-                    onRename(room.id, room.name)
-                  }
+                  onClick={() => onRename(room.id, room.name)}
                   title="Rename data room"
                   aria-label="Rename data room"
                 >

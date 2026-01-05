@@ -11,13 +11,8 @@ interface FolderPanelProps {
   expandedFolderIds: Set<string>;
   onSelect: (folderId: string) => void;
   onToggle: (folderId: string) => void;
-  onRename: (folderId: string) => void;
-  onDelete: (folderId: string) => void;
   onCreateFolder: () => void;
-  onDropItems: (
-    event: React.DragEvent<HTMLElement>,
-    folderId: string,
-  ) => void;
+  onDropItems: (event: React.DragEvent<HTMLElement>, folderId: string) => void;
   onDragOverFolder: (event: React.DragEvent<HTMLElement>) => void;
   onDragStartFolder: (
     event: React.DragEvent<HTMLDivElement>,
@@ -32,8 +27,6 @@ export function FolderPanel({
   expandedFolderIds,
   onSelect,
   onToggle,
-  onRename,
-  onDelete,
   onCreateFolder,
   onDropItems,
   onDragOverFolder,
@@ -44,10 +37,7 @@ export function FolderPanel({
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <h2 className="font-display text-lg">Folders</h2>
-          <p
-            className="text-xs text-muted truncate"
-            title={dataroom.name}
-          >
+          <p className="text-xs text-muted truncate" title={dataroom.name}>
             {dataroom.name}
           </p>
         </div>
@@ -67,9 +57,6 @@ export function FolderPanel({
           expandedFolderIds={expandedFolderIds}
           onSelect={onSelect}
           onToggle={onToggle}
-          onRename={onRename}
-          onDelete={onDelete}
-          hideRoot
           onDropItems={onDropItems}
           onDragOverFolder={onDragOverFolder}
           onDragStartFolder={onDragStartFolder}

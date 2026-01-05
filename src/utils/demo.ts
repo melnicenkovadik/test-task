@@ -66,7 +66,6 @@ export const createDemoState = (): AppState => {
   };
 
   const file1Id = createId();
-  const file2Id = createId();
   const file3Id = createId();
 
   const file1: FileItem = {
@@ -76,16 +75,6 @@ export const createDemoState = (): AppState => {
     dataroomId,
     size: 980_000,
     createdAt: createdAt + 1000 * 60 * 60 * 2,
-    source: "demo",
-  };
-
-  const file2: FileItem = {
-    id: file2Id,
-    name: "NDA template.pdf",
-    parentFolderId: legalFolderId,
-    dataroomId,
-    size: 420_000,
-    createdAt: createdAt + 1000 * 60 * 60 * 9,
     source: "demo",
   };
 
@@ -111,7 +100,6 @@ export const createDemoState = (): AppState => {
   };
 
   rootFolder.fileIds = [file1Id];
-  legalFolder.fileIds = [file2Id];
   financeFolder.fileIds = [file3Id];
 
   return {
@@ -124,7 +112,6 @@ export const createDemoState = (): AppState => {
     },
     files: {
       [file1Id]: file1,
-      [file2Id]: file2,
       [file3Id]: file3,
       [resumeFileId]: resumeFile,
     },

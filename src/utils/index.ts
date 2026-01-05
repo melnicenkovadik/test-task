@@ -2,7 +2,8 @@ import type { AppState } from "../types";
 
 export const createId = () => crypto.randomUUID();
 
-export const normalizeName = (value: string) => value.trim().replace(/\s+/g, " ");
+export const normalizeName = (value: string) =>
+  value.trim().replace(/\s+/g, " ");
 
 export const formatBytes = (bytes: number) => {
   if (bytes < 1024) return `${bytes} B`;

@@ -1,4 +1,4 @@
-import { useRef, type ReactNode } from "react";
+import { useRef } from "react";
 import type { Dataroom, FileItem, Folder, ViewMode } from "../types";
 import { cx } from "../utils";
 import { buttonStyles } from "../utils/styles";
@@ -13,30 +13,10 @@ import {
 import { DocumentsGrid } from "./DocumentsGrid";
 import { DocumentsList } from "./DocumentsList";
 import { EmptyState } from "./EmptyState";
+import { TooltipLabel } from "../shared/ui/TooltipLabel";
 
 const formatDisplayName = (name: string, limit = 20) =>
   name.length > limit ? `${name.slice(0, limit)}...` : name;
-
-function TooltipLabel({
-  text,
-  children,
-}: {
-  text: string;
-  children: ReactNode;
-}) {
-  return (
-    <span className="relative inline-flex items-center group overflow-visible">
-      <span className="truncate">{children}</span>
-      <span
-        className="pointer-events-none absolute left-1/2 top-full z-20 mt-3 -translate-x-1/2 whitespace-nowrap rounded-lg border border-white/10 bg-slate-900/95 px-3 py-1 text-[11px] font-medium text-white shadow-xl shadow-black/25 opacity-0 scale-95 transition duration-150 group-hover:opacity-100 group-hover:scale-100 group-focus-within:opacity-100 group-focus-within:scale-100"
-        role="tooltip"
-      >
-        {text}
-        <span className="pointer-events-none absolute left-1/2 -top-1.5 -translate-x-1/2 h-3 w-3 rotate-45 rounded-[3px] border border-white/10 bg-slate-900/95 shadow-md shadow-black/20" />
-      </span>
-    </span>
-  );
-}
 
 interface DocumentsPanelProps {
   dataroom: Dataroom;
@@ -135,7 +115,9 @@ export function DocumentsPanel({
     "inline-flex h-8 w-8 items-center justify-center rounded-full border border-transparent text-muted transition";
   const viewButtonActive = "border-border bg-white text-accent shadow-soft";
 
-  const handleFileInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileInputChange = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const fileList = event.target.files;
     if (fileList) {
       onUploadFiles(fileList);
@@ -145,7 +127,6 @@ export function DocumentsPanel({
 
   return (
     <section className="rounded-3xl border border-border bg-white/80 p-6 shadow-card">
-      {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="min-w-0">
           <p
@@ -158,7 +139,9 @@ export function DocumentsPanel({
             {!isRootFolder && activeFolder?.parentId && (
               <button
                 className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border bg-white/70 text-muted transition hover:bg-white hover:text-ink"
-                onClick={() => onSelectFolder(activeFolder.parentId)}
+                onClick={() =>
+                  activeFolder.parentId && onSelectFolder(activeFolder.parentId)
+                }
                 title="Back to parent folder"
                 aria-label="Back to parent folder"
               >
@@ -248,7 +231,6 @@ export function DocumentsPanel({
         </div>
       )}
 
-      {/* Search and Stats */}
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <div className="inline-flex items-center gap-2 rounded-full border border-border bg-white/70 px-3 py-2 text-sm">
@@ -300,7 +282,6 @@ export function DocumentsPanel({
         </p>
       </div>
 
-      {/* Drop Zone and Content */}
       <div
         className={cx(
           "mt-6 rounded-3xl border border-dashed border-border bg-white/60 p-5 transition",
@@ -311,7 +292,8 @@ export function DocumentsPanel({
         onDrop={onDrop}
       >
         <div className="mb-3 rounded-2xl bg-white/60 px-4 py-3 text-xs text-muted">
-          Click any PDF to open a full-screen preview. Drag and drop to upload, or use the buttons above.
+          Click any PDF to open a full-screen preview. Drag and drop to upload,
+          or use the buttons above.
         </div>
         {isEmpty ? (
           <EmptyState
