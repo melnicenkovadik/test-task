@@ -1,4 +1,4 @@
-import { useLoadingStore } from "../../store/loadingStore";
+import { useLoadingStore } from "../model/loadingStore";
 
 export function Loader() {
   const isLoading = useLoadingStore((state) => state.isLoading);

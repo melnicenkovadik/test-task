@@ -1,26 +1,31 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { ViewMode } from "../../../shared/types";
+import { DEFAULT_VIEW_MODE } from "../../../shared/lib/viewMode";
 
-export type DocumentsStore = {
-  cases: Record<string, { viewMode: ViewMode }>;
-  setViewMode: (caseId: string, viewMode: ViewMode) => void;
+export type ViewModeStore = {
+  datarooms: Record<string, { viewMode: ViewMode }>;
+  setViewMode: (dataroomId: string, viewMode: ViewMode) => void;
 };
 
-export const DEFAULT_VIEW_MODE: ViewMode = "list";
+export type DocumentsStore = ViewModeStore;
 
-export const useDocumentsStore = create<DocumentsStore>()(
+export { DEFAULT_VIEW_MODE };
+
+export const useViewModeStore = create<ViewModeStore>()(
   persist(
     (set, get) => ({
-      cases: {},
-      setViewMode: (caseId, viewMode) => {
-        if (!caseId) return;
-        const { cases } = get();
-        const current = cases[caseId] ?? { viewMode: DEFAULT_VIEW_MODE };
+      datarooms: {},
+      setViewMode: (dataroomId, viewMode) => {
+        if (!dataroomId) return;
+        const { datarooms } = get();
+        const current = datarooms[dataroomId] ?? {
+          viewMode: DEFAULT_VIEW_MODE,
+        };
         set({
-          cases: {
-            ...cases,
-            [caseId]: {
+          datarooms: {
+            ...datarooms,
+            [dataroomId]: {
               ...current,
               viewMode,
             },
@@ -31,7 +36,9 @@ export const useDocumentsStore = create<DocumentsStore>()(
     {
       name: "documents-store-v2",
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({ cases: state.cases }),
+      partialize: (state) => ({ datarooms: state.datarooms }),
     },
   ),
 );
+
+export const useDocumentsStore = useViewModeStore;

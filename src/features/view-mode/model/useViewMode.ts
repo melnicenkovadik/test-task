@@ -1,13 +1,13 @@
-import { DEFAULT_VIEW_MODE, useDocumentsStore } from "./store";
+import { DEFAULT_VIEW_MODE, useViewModeStore } from "./store";
 import type { ViewMode } from "../../../shared/types";
 
 export const useViewMode = (dataroomId: string | null) => {
-  const setViewModeStore = useDocumentsStore((state) => state.setViewMode);
+  const setViewModeStore = useViewModeStore((state) => state.setViewMode);
 
   const resolveViewMode = (id: string | null): ViewMode => {
     if (!id) return DEFAULT_VIEW_MODE;
     return (
-      useDocumentsStore.getState().cases[id]?.viewMode ?? DEFAULT_VIEW_MODE
+      useViewModeStore.getState().datarooms[id]?.viewMode ?? DEFAULT_VIEW_MODE
     );
   };
 

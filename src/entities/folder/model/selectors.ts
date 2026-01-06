@@ -1,10 +1,10 @@
 import type { Folder } from "./types";
-import type { AppState } from "../../../types";
+import type { AppState } from "../../workspace/model/types";
 import {
   getSiblingNames,
   getDescendantStats,
   collectFolderIds,
-} from "../../../shared/lib/selectors";
+} from "../../workspace/lib/selectors";
 
 export { getSiblingNames, getDescendantStats, collectFolderIds };
 

@@ -1,5 +1,5 @@
 import type { FileItem } from "./types";
-import type { AppState } from "../../../types";
+import type { AppState } from "../../workspace/model/types";
 import { isPdfFile as checkIsPdfFile } from "../../../shared/lib/utils";
 
 export const isPdfFile = checkIsPdfFile;

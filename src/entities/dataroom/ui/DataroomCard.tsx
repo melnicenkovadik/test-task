@@ -30,11 +30,9 @@ export function DataroomCard({
           ? "border-accent bg-white shadow-soft"
           : "border-border bg-white/60 hover:bg-white cursor-pointer",
       )}
+      onClick={onSelect}
     >
-      <button
-        className="w-full text-left transition hover:text-accent"
-        onClick={onSelect}
-      >
+      <div className="w-full text-left transition hover:text-accent">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-sm font-semibold truncate" title={dataroom.name}>
@@ -50,11 +48,14 @@ export function DataroomCard({
             </span>
           )}
         </div>
-      </button>
+      </div>
       <div className="mt-3 flex items-center gap-1 opacity-100 transition lg:opacity-0 lg:group-hover:opacity-100">
         <button
           className={buttonStyles.icon}
-          onClick={onRename}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRename();
+          }}
           title="Rename data room"
           aria-label="Rename data room"
         >
@@ -62,7 +63,10 @@ export function DataroomCard({
         </button>
         <button
           className={buttonStyles.icon}
-          onClick={onDelete}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
           title="Delete data room"
           aria-label="Delete data room"
         >

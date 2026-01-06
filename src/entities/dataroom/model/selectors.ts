@@ -1,5 +1,5 @@
 import type { Dataroom } from "./types";
-import type { AppState } from "../../../types";
+import type { AppState } from "../../workspace/model/types";
 
 export const getDataroomStats = (dataroomId: string, state: AppState) => {
   const fileCount = Object.values(state.files).filter(

@@ -7,6 +7,7 @@ import {
   FolderIcon,
   TrashIcon,
 } from "../../../shared/ui/Icons";
+import { TooltipLabel } from "../../../shared/ui/TooltipLabel";
 
 interface FolderTreeProps {
   rootId: string;
@@ -15,8 +16,8 @@ interface FolderTreeProps {
   expandedFolderIds: Set<string>;
   onSelect: (folderId: string) => void;
   onToggle: (folderId: string) => void;
-  onRename: (folderId: string) => void;
-  onDelete: (folderId: string) => void;
+  onRename?: (folderId: string) => void;
+  onDelete?: (folderId: string) => void;
   hideRoot?: boolean;
   onDropItems?: (event: React.DragEvent<HTMLElement>, folderId: string) => void;
   onDragOverFolder?: (event: React.DragEvent<HTMLElement>) => void;
@@ -49,6 +50,7 @@ export function FolderTree({
     const hasChildren = folder.childFolderIds.length > 0;
     const isActive = folder.id === activeFolderId;
     const label = isRoot ? "All documents" : folder.name;
+    const showActions = Boolean(onRename || onDelete) && !isRoot;
 
     return (
       <div key={folder.id} className="space-y-1">
@@ -90,13 +92,13 @@ export function FolderTree({
             <span className="shrink-0 text-accent">
               <FolderIcon />
             </span>
-            <span className="truncate" title={label}>
+            <TooltipLabel text={label} className="flex-1">
               {label}
-            </span>
+            </TooltipLabel>
           </button>
-          <div className="flex items-center gap-1 text-xs opacity-100 transition lg:opacity-0 lg:group-hover:opacity-100">
-            {!isRoot && (
-              <>
+          {showActions && (
+            <div className="flex items-center gap-1 text-xs opacity-100 transition lg:opacity-0 lg:group-hover:opacity-100">
+              {onRename && (
                 <button
                   className={buttonStyles.icon}
                   onClick={() => onRename(folder.id)}
@@ -105,6 +107,8 @@ export function FolderTree({
                 >
                   <EditIcon />
                 </button>
+              )}
+              {onDelete && (
                 <button
                   className={buttonStyles.icon}
                   onClick={() => onDelete(folder.id)}
@@ -113,9 +117,9 @@ export function FolderTree({
                 >
                   <TrashIcon />
                 </button>
-              </>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
 
         {isExpanded && hasChildren && (
