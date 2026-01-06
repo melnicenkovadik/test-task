@@ -25,9 +25,7 @@ export function DocumentsPanelBody() {
     handleToggleFolderSelection,
     handleToggleFileSelection,
     handleSelectFolder,
-    handleRenameFolder,
     handleDeleteFolder,
-    handleRenameFile,
     handleDeleteFile,
     handleDragStartItem,
     handleDragOverFolder,
@@ -38,6 +36,7 @@ export function DocumentsPanelBody() {
   const setPreviewFileId = useWorkspaceStore(
     workspaceSelectors.setPreviewFileId,
   );
+  const setDialog = useWorkspaceStore(workspaceSelectors.setDialog);
 
   const selectedFolderIds = selection.folders;
   const selectedFileIds = selection.files;
@@ -57,6 +56,24 @@ export function DocumentsPanelBody() {
     const file = fileId ? data.files[fileId] : null;
     if (fileId && !file?.blobUrl) {
       toast.info("Preview becomes available after the PDF is uploaded.");
+    }
+  };
+
+  const handleOpenRenameFolder = (folderId: string) => {
+    const folder = data.folders[folderId];
+    if (folder) {
+      setDialog({
+        type: "rename-folder",
+        id: folderId,
+        currentName: folder.name,
+      });
+    }
+  };
+
+  const handleOpenRenameFile = (fileId: string) => {
+    const file = data.files[fileId];
+    if (file) {
+      setDialog({ type: "rename-file", id: fileId, currentName: file.name });
     }
   };
 
@@ -94,9 +111,9 @@ export function DocumentsPanelBody() {
           onToggleFileSelection={handleToggleFileSelection}
           onSelectFolder={handleSelectFolder}
           onSelectFile={handleSelectFile}
-          onRenameFolder={handleRenameFolder}
+          onRenameFolder={handleOpenRenameFolder}
           onDeleteFolder={handleDeleteFolder}
-          onRenameFile={handleRenameFile}
+          onRenameFile={handleOpenRenameFile}
           onDeleteFile={handleDeleteFile}
           onDragStartItem={handleDragStartItem}
           onDragOverFolder={handleDragOverFolder}
@@ -117,9 +134,9 @@ export function DocumentsPanelBody() {
           onToggleFileSelection={handleToggleFileSelection}
           onSelectFolder={handleSelectFolder}
           onSelectFile={handleSelectFile}
-          onRenameFolder={handleRenameFolder}
+          onRenameFolder={handleOpenRenameFolder}
           onDeleteFolder={handleDeleteFolder}
-          onRenameFile={handleRenameFile}
+          onRenameFile={handleOpenRenameFile}
           onDeleteFile={handleDeleteFile}
           onDragStartItem={handleDragStartItem}
           onDragOverFolder={handleDragOverFolder}
