@@ -45,7 +45,7 @@ export const useWorkspaceData = (userId: string | null) => {
             ? firestoreActiveFolderId
             : null) ??
           (activeDataroomId
-            ? firestore.data.datarooms[activeDataroomId]?.rootFolderId ?? null
+            ? (firestore.data.datarooms[activeDataroomId]?.rootFolderId ?? null)
             : null);
 
         return { activeDataroomId, activeFolderId };

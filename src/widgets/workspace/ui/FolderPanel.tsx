@@ -9,9 +9,7 @@ import { FolderTree } from "../../../entities/folder/ui/FolderTree";
 
 export const FolderPanel = memo(function FolderPanel() {
   const isCollapsed = useUIStore((state) => state.foldersCollapsed);
-  const setFoldersCollapsed = useUIStore(
-    (state) => state.setFoldersCollapsed,
-  );
+  const setFoldersCollapsed = useUIStore((state) => state.setFoldersCollapsed);
   const data = useWorkspaceStore((state) => state.data);
   const setDialog = useWorkspaceStore((state) => state.setDialog);
   const dataroom = data.activeDataroomId
