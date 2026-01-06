@@ -3,6 +3,7 @@ import { useFirestore } from "../../../features/data/model/useFirestore";
 import { getAllUserFiles } from "../../../shared/lib/indexedDB";
 import { logError } from "../../../shared/lib/logger";
 import { createEmptyState } from "../../../entities/workspace/lib/demo";
+import type { AppState } from "../../../entities/workspace/model/types";
 import {
   useWorkspaceStore,
   workspaceSelectors,
@@ -16,6 +17,40 @@ export const useWorkspaceData = (userId: string | null) => {
 
   useEffect(() => {
     if (userId && firestore.data && !firestore.loading) {
+      const resolveActiveIds = (prev: AppState) => {
+        const firestoreActiveDataroomId = firestore.data.activeDataroomId;
+        const firestoreActiveFolderId = firestore.data.activeFolderId;
+
+        const activeDataroomId =
+          (prev.activeDataroomId &&
+          firestore.data.datarooms[prev.activeDataroomId]
+            ? prev.activeDataroomId
+            : null) ??
+          (firestoreActiveDataroomId &&
+          firestore.data.datarooms[firestoreActiveDataroomId]
+            ? firestoreActiveDataroomId
+            : null);
+
+        const folderMatchesActiveRoom = (folderId: string | null) =>
+          folderId &&
+          firestore.data.folders[folderId] &&
+          (!activeDataroomId ||
+            firestore.data.folders[folderId].dataroomId === activeDataroomId);
+
+        const activeFolderId =
+          (folderMatchesActiveRoom(prev.activeFolderId)
+            ? prev.activeFolderId
+            : null) ??
+          (folderMatchesActiveRoom(firestoreActiveFolderId)
+            ? firestoreActiveFolderId
+            : null) ??
+          (activeDataroomId
+            ? firestore.data.datarooms[activeDataroomId]?.rootFolderId ?? null
+            : null);
+
+        return { activeDataroomId, activeFolderId };
+      };
+
       const hydrateFromIndexedDB = async () => {
         try {
           const indexedDBFiles = await getAllUserFiles(userId);
@@ -30,15 +65,7 @@ export const useWorkspaceData = (userId: string | null) => {
           });
 
           setData((prev) => {
-            const activeFolderId =
-              prev.activeFolderId && firestore.data.folders[prev.activeFolderId]
-                ? prev.activeFolderId
-                : firestore.data.activeFolderId || prev.activeFolderId;
-            const activeDataroomId =
-              prev.activeDataroomId &&
-              firestore.data.datarooms[prev.activeDataroomId]
-                ? prev.activeDataroomId
-                : firestore.data.activeDataroomId || prev.activeDataroomId;
+            const { activeDataroomId, activeFolderId } = resolveActiveIds(prev);
 
             return {
               ...firestore.data,
@@ -50,15 +77,7 @@ export const useWorkspaceData = (userId: string | null) => {
         } catch (error) {
           logError("Error loading files from IndexedDB", error);
           setData((prev) => {
-            const activeFolderId =
-              prev.activeFolderId && firestore.data.folders[prev.activeFolderId]
-                ? prev.activeFolderId
-                : firestore.data.activeFolderId || prev.activeFolderId;
-            const activeDataroomId =
-              prev.activeDataroomId &&
-              firestore.data.datarooms[prev.activeDataroomId]
-                ? prev.activeDataroomId
-                : firestore.data.activeDataroomId || prev.activeDataroomId;
+            const { activeDataroomId, activeFolderId } = resolveActiveIds(prev);
 
             return {
               ...firestore.data,

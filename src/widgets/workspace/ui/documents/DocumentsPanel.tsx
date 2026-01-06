@@ -12,7 +12,7 @@ export const DocumentsPanel = memo(function DocumentsPanel() {
   }
 
   return (
-    <section className="rounded-3xl border border-border bg-white/80 p-6 shadow-card">
+    <section className="rounded-3xl border border-border bg-white/80 p-4 sm:p-6 shadow-card min-w-0">
       <DocumentsPanelHeader />
       <DocumentsPanelControls />
       <DocumentsPanelBody />

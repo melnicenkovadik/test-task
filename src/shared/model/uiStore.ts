@@ -3,17 +3,23 @@ import { createJSONStorage, persist } from "zustand/middleware";
 
 export type UIStore = {
   expandedFolders: Record<string, string[]>;
+  dataroomsCollapsed: boolean;
+  foldersCollapsed: boolean;
   setExpandedFolders: (dataroomId: string, folderIds: string[]) => void;
   toggleFolder: (dataroomId: string, folderId: string) => void;
   addFolder: (dataroomId: string, folderId: string) => void;
   removeFolder: (dataroomId: string, folderId: string) => void;
   getExpandedFolders: (dataroomId: string) => Set<string>;
+  setDataroomsCollapsed: (value: boolean) => void;
+  setFoldersCollapsed: (value: boolean) => void;
 };
 
 export const useUIStore = create<UIStore>()(
   persist(
     (set, get) => ({
       expandedFolders: {},
+      dataroomsCollapsed: false,
+      foldersCollapsed: false,
       setExpandedFolders: (dataroomId, folderIds) => {
         set((state) => ({
           expandedFolders: {
@@ -55,11 +61,17 @@ export const useUIStore = create<UIStore>()(
         const folderIds = get().expandedFolders[dataroomId] || [];
         return new Set(folderIds);
       },
+      setDataroomsCollapsed: (value) => set({ dataroomsCollapsed: value }),
+      setFoldersCollapsed: (value) => set({ foldersCollapsed: value }),
     }),
     {
       name: "ui-store-v1",
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({ expandedFolders: state.expandedFolders }),
+      partialize: (state) => ({
+        expandedFolders: state.expandedFolders,
+        dataroomsCollapsed: state.dataroomsCollapsed,
+        foldersCollapsed: state.foldersCollapsed,
+      }),
     },
   ),
 );

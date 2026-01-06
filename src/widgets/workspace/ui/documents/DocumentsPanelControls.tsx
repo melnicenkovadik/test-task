@@ -60,18 +60,20 @@ export function DocumentsPanelControls() {
         </div>
       )}
 
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex items-center gap-2 rounded-full border border-border bg-white/70 px-3 py-2 text-sm">
-            <SearchIcon />
+          <div className="inline-flex items-center gap-2 rounded-full border border-border bg-white/70 px-3 py-2 text-sm flex-1 min-w-0 sm:flex-initial sm:w-44">
+            <span className="shrink-0">
+              <SearchIcon />
+            </span>
             <input
-              className="w-44 bg-transparent text-sm outline-none placeholder-muted focus:placeholder-transparent transition"
+              className="bg-transparent text-sm outline-none placeholder-muted focus:placeholder-transparent transition min-w-0 flex-1"
               placeholder="Search folders or files"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
             />
           </div>
-          <div className="inline-flex items-center gap-1 rounded-full border border-border bg-white/70 p-1">
+          <div className="inline-flex items-center gap-1 rounded-full border border-border bg-white/70 p-1 shrink-0">
             <button
               className={cx(
                 viewButtonBase,
@@ -97,7 +99,7 @@ export function DocumentsPanelControls() {
           </div>
           {hasVisibleItems && (
             <button
-              className={cx(buttonStyles.base, buttonStyles.subtle)}
+              className={cx(buttonStyles.base, buttonStyles.subtle, "shrink-0")}
               onClick={
                 allVisibleSelected ? clearSelection : handleSelectAllVisible
               }
@@ -106,7 +108,7 @@ export function DocumentsPanelControls() {
             </button>
           )}
         </div>
-        <p className="text-xs text-muted">
+        <p className="text-xs text-muted shrink-0">
           {filteredFolders.length} folders · {filteredFiles.length} files
         </p>
       </div>

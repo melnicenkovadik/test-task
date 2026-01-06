@@ -14,9 +14,13 @@ export function WorkspaceContent() {
   return (
     <main className="flex flex-col gap-6">
       {activeDataroom && activeFolder && hasDatarooms ? (
-        <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
-          <WorkspaceExplorer />
-          <WorkspaceDetailPanel />
+        <div className="grid gap-6 lg:grid-cols-[auto_minmax(0,1fr)]">
+          <div className="min-w-0 w-full lg:w-auto">
+            <WorkspaceExplorer />
+          </div>
+          <div className="min-w-0">
+            <WorkspaceDetailPanel />
+          </div>
         </div>
       ) : (
         <EmptyDataroom

@@ -49,18 +49,18 @@ export function DocumentsPanelHeader() {
   };
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-4">
-      <div className="min-w-0">
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0 flex-1">
         <p
           className="text-xs uppercase tracking-[0.2em] text-muted truncate"
           title={activeDataroom.name}
         >
           {activeDataroom.name}
         </p>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 mt-1">
           {!isRootFolder && activeFolder.parentId && (
             <button
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border bg-white/70 text-muted transition hover:bg-white hover:text-ink"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-white/70 text-muted transition hover:bg-white hover:text-ink"
               onClick={() =>
                 activeFolder.parentId &&
                 handleSelectFolder(activeFolder.parentId)
@@ -71,7 +71,10 @@ export function DocumentsPanelHeader() {
               <BackIcon />
             </button>
           )}
-          <h2 className="font-display text-xl truncate" title={activeTitle}>
+          <h2
+            className="font-display text-xl truncate min-w-0"
+            title={activeTitle}
+          >
             {!isRootFolder ? (
               <TooltipLabel text={activeFolder.name}>
                 {formatDisplayName(activeFolder.name)}
@@ -81,41 +84,45 @@ export function DocumentsPanelHeader() {
             )}
           </h2>
         </div>
-        <nav className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-          {folderPath.map((folder) => (
-            <button
-              key={folder.id}
-              className="rounded-full border border-border bg-white/60 px-2 py-1 text-muted hover:bg-white hover:text-accent transition"
-              onClick={() => handleSelectFolder(folder.id)}
-              title={folder.parentId === null ? "Documents" : folder.name}
-              onDragOver={handleDragOverFolder}
-              onDrop={(event) => handleDropOnFolder(event, folder.id)}
-            >
-              {folder.parentId === null ? (
-                "Documents"
-              ) : (
-                <TooltipLabel text={folder.name}>
-                  {formatDisplayName(folder.name)}
-                </TooltipLabel>
-              )}
-            </button>
-          ))}
+        <nav className="mt-2 overflow-x-auto -mx-6 px-6">
+          <div className="flex items-center gap-2 text-xs min-w-max">
+            {folderPath.map((folder) => (
+              <button
+                key={folder.id}
+                className="rounded-full border border-border bg-white/60 px-2 py-1 text-muted hover:bg-white hover:text-accent transition shrink-0"
+                onClick={() => handleSelectFolder(folder.id)}
+                title={folder.parentId === null ? "Documents" : folder.name}
+                onDragOver={handleDragOverFolder}
+                onDrop={(event) => handleDropOnFolder(event, folder.id)}
+              >
+                {folder.parentId === null ? (
+                  "Documents"
+                ) : (
+                  <TooltipLabel text={folder.name}>
+                    {formatDisplayName(folder.name)}
+                  </TooltipLabel>
+                )}
+              </button>
+            ))}
+          </div>
         </nav>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 shrink-0">
         <button
           className={cx(buttonStyles.base, buttonStyles.ghost)}
           onClick={handleCreateFolderDialog}
         >
           <PlusIcon />
-          New folder
+          <span className="hidden sm:inline">New folder</span>
+          <span className="sm:hidden">Folder</span>
         </button>
         <button
           className={cx(buttonStyles.base, buttonStyles.primary)}
           onClick={() => fileInputRef.current?.click()}
         >
           <UploadIcon />
-          Upload PDF
+          <span className="hidden sm:inline">Upload PDF</span>
+          <span className="sm:hidden">Upload</span>
         </button>
         <input
           ref={fileInputRef}

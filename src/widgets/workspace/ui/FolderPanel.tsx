@@ -4,10 +4,14 @@ import { useWorkspaceActions } from "../model/workspaceActionsContext";
 import { useUIStore } from "../../../shared/model/uiStore";
 import { cx } from "../../../shared/lib/utils";
 import { buttonStyles } from "../../../shared/ui/styles";
-import { PlusIcon } from "../../../shared/ui/Icons";
+import { ChevronIcon, PlusIcon } from "../../../shared/ui/Icons";
 import { FolderTree } from "../../../entities/folder/ui/FolderTree";
 
 export const FolderPanel = memo(function FolderPanel() {
+  const isCollapsed = useUIStore((state) => state.foldersCollapsed);
+  const setFoldersCollapsed = useUIStore(
+    (state) => state.setFoldersCollapsed,
+  );
   const data = useWorkspaceStore((state) => state.data);
   const setDialog = useWorkspaceStore((state) => state.setDialog);
   const dataroom = data.activeDataroomId
@@ -50,37 +54,82 @@ export const FolderPanel = memo(function FolderPanel() {
   };
 
   return (
-    <section className="rounded-3xl border border-border bg-panel/80 p-5 shadow-card">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="font-display text-lg">Folders</h2>
-          <p className="text-xs text-muted truncate" title={dataroom.name}>
-            {dataroom.name}
-          </p>
-        </div>
+    <section
+      className={cx(
+        "w-full rounded-3xl border border-border bg-panel/80 shadow-card transition-all duration-300",
+        isCollapsed
+          ? "p-5 lg:w-16 lg:px-3 lg:flex lg:h-full lg:items-center lg:justify-center"
+          : "p-5",
+      )}
+    >
+      <div
+        className={cx(
+          "flex items-center justify-between gap-3 transition-all duration-300",
+          isCollapsed && "lg:flex-col lg:items-center lg:justify-center",
+        )}
+      >
         <button
-          className={cx(buttonStyles.base, buttonStyles.subtle)}
-          onClick={handleCreateFolder}
+          className={cx(
+            "flex items-center gap-2 text-left min-w-0 transition-all duration-300",
+            isCollapsed
+              ? "flex-1 lg:w-full lg:flex-col lg:items-center lg:justify-center lg:gap-2"
+              : "flex-1 lg:flex-none",
+          )}
+          onClick={() => setFoldersCollapsed(!isCollapsed)}
+          aria-label={isCollapsed ? "Expand folders" : "Collapse folders"}
+          aria-expanded={!isCollapsed}
         >
-          <PlusIcon />
-          Folder
+          <span
+            className={cx(
+              "shrink-0 transition-transform duration-300",
+              isCollapsed
+                ? "rotate-90 lg:rotate-0"
+                : "-rotate-90 lg:rotate-180",
+            )}
+          >
+            <ChevronIcon isOpen={false} />
+          </span>
+          <div className={cx("min-w-0", isCollapsed && "lg:hidden")}>
+            <h2 className="font-display text-lg lg:whitespace-nowrap">
+              Folders
+            </h2>
+            <p
+              className="text-xs text-muted truncate lg:whitespace-nowrap"
+              title={dataroom.name}
+            >
+              {dataroom.name}
+            </p>
+          </div>
         </button>
+        {!isCollapsed && (
+          <button
+            className={cx(buttonStyles.base, buttonStyles.subtle, "shrink-0")}
+            onClick={handleCreateFolder}
+          >
+            <PlusIcon />
+            <span className="hidden sm:inline">Folder</span>
+          </button>
+        )}
       </div>
-      <div className="mt-4 space-y-2">
-        <FolderTree
-          rootId={dataroom.rootFolderId}
-          folders={folders}
-          activeFolderId={activeFolderId}
-          expandedFolderIds={expandedFolderIds}
-          onSelect={handleSelectFolder}
-          onToggle={handleToggle}
-          onDropItems={handleDropOnFolder}
-          onDragOverFolder={handleDragOverFolder}
-          onDragStartFolder={(event, folderId) =>
-            handleDragStartItem(event, "folder", folderId)
-          }
-        />
-      </div>
+      {!isCollapsed && (
+        <div className="mt-4 overflow-x-auto -mx-5 px-5 lg:overflow-x-visible lg:mx-0 lg:px-0">
+          <div className="min-w-0 space-y-2">
+            <FolderTree
+              rootId={dataroom.rootFolderId}
+              folders={folders}
+              activeFolderId={activeFolderId}
+              expandedFolderIds={expandedFolderIds}
+              onSelect={handleSelectFolder}
+              onToggle={handleToggle}
+              onDropItems={handleDropOnFolder}
+              onDragOverFolder={handleDragOverFolder}
+              onDragStartFolder={(event, folderId) =>
+                handleDragStartItem(event, "folder", folderId)
+              }
+            />
+          </div>
+        </div>
+      )}
     </section>
   );
 });

@@ -80,14 +80,14 @@ export function DocumentsPanelBody() {
   return (
     <div
       className={cx(
-        "mt-6 rounded-3xl border border-dashed border-border bg-white/60 p-5 transition",
+        "mt-6 rounded-3xl border border-dashed border-border bg-white/60 p-3 sm:p-5 transition",
         dragActive && "border-accent bg-accent/10 scale-[1.01]",
       )}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <div className="mb-3 rounded-2xl bg-white/60 px-4 py-3 text-xs text-muted">
+      <div className="mb-3 rounded-2xl bg-white/60 px-3 sm:px-4 py-2 sm:py-3 text-xs text-muted">
         Click any PDF to open a full-screen preview. Drag and drop to upload, or
         use the buttons above.
       </div>

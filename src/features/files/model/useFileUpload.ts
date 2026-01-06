@@ -27,9 +27,6 @@ export const useFileUpload = (
 ) => {
   const data = useWorkspaceStore(workspaceSelectors.data);
   const setData = useWorkspaceStore(workspaceSelectors.setData);
-  const setPreviewFileId = useWorkspaceStore(
-    workspaceSelectors.setPreviewFileId,
-  );
   const { setLoading } = useLoadingStore();
 
   const handleUploadFiles = useCallback(
@@ -53,7 +50,6 @@ export const useFileUpload = (
 
       const usedNames = getSiblingNames(folderId, data);
       const newFiles: FileItem[] = [];
-      let previewId: string | null = null;
       const now = Date.now();
 
       if (userId) {
@@ -83,7 +79,6 @@ export const useFileUpload = (
 
           const uploadedFiles = await Promise.all(uploadPromises);
           newFiles.push(...uploadedFiles);
-          if (uploadedFiles.length > 0) previewId = uploadedFiles[0].id;
 
           const updatedFileIds = [
             ...(parent.fileIds || []),
@@ -137,9 +132,6 @@ export const useFileUpload = (
         });
       }
 
-      if (previewId) {
-        setPreviewFileId(previewId);
-      }
       if (invalidCount > 0) {
         toast.info(
           `Uploaded ${validFiles.length} PDF(s). ${invalidCount} file(s) skipped.`,
@@ -148,7 +140,7 @@ export const useFileUpload = (
         toast.success("Files uploaded successfully.");
       }
     },
-    [data, firestore, setData, setLoading, setPreviewFileId, userId],
+    [data, firestore, setData, setLoading, userId],
   );
 
   return { handleUploadFiles };

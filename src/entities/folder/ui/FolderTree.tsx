@@ -56,7 +56,7 @@ export function FolderTree({
       <div key={folder.id} className="space-y-1">
         <div
           className={cx(
-            "group flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm transition",
+            "group flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm transition min-w-0",
             isActive
               ? "border-accent bg-white text-ink shadow-soft"
               : "border-border bg-white/60 text-muted hover:bg-white",
@@ -75,7 +75,7 @@ export function FolderTree({
         >
           {hasChildren ? (
             <button
-              className="flex items-center gap-2 transition hover:text-ink"
+              className="flex shrink-0 items-center gap-2 transition hover:text-ink"
               onClick={() => onToggle(folder.id)}
               aria-label={isExpanded ? "Collapse folder" : "Expand folder"}
               aria-expanded={isExpanded}
@@ -83,7 +83,7 @@ export function FolderTree({
               <ChevronIcon isOpen={isExpanded} />
             </button>
           ) : (
-            <span className="h-4 w-4" />
+            <span className="h-4 w-4 shrink-0" />
           )}
           <button
             className="flex flex-1 min-w-0 items-center gap-2 text-left transition hover:text-ink"
@@ -92,7 +92,7 @@ export function FolderTree({
             <span className="shrink-0 text-accent">
               <FolderIcon />
             </span>
-            <TooltipLabel text={label} className="flex-1">
+            <TooltipLabel text={label} className="flex-1 min-w-0 truncate">
               {label}
             </TooltipLabel>
           </button>
