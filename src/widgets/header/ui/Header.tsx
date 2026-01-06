@@ -37,7 +37,7 @@ export function Header({ onCreateDataroom, onLoadDemo }: HeaderProps) {
           onClick={onLoadDemo}
         >
           <SparkIcon />
-          Load demo local
+          Load local demo
         </button>
       </div>
     </header>
